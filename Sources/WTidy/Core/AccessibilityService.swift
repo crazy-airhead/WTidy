@@ -16,6 +16,10 @@ final class AccessibilityService {
     private var observer: AXObserver?
     private var appElement: AXUIElement?
     private var observedWindow: AXUIElement?
+    /// 跨 teardown 保留：上次报告过的聚焦窗口。
+    /// 看门狗重建监听链时会重新 observe 同一个窗口，此时不应再发
+    /// focusedWindowChanged——否则正在进行的拖拽会被误取消。
+    private var lastReportedWindow: AXUIElement?
 
     enum Event {
         case windowDidMove(AXWindow)
@@ -59,6 +63,9 @@ final class AccessibilityService {
 
         if force || pid != observedPID {
             teardown()
+            if pid != observedPID {
+                lastReportedWindow = nil   // 换 app：允许重新报告
+            }
             buildObserver(pid: pid)
         } else {
             observeFocusedWindow()
@@ -162,6 +169,10 @@ final class AccessibilityService {
         if movedErr != .success && destroyedErr != .success {
             AppLog.warn("窗口通知挂载失败 pid=\(pid) movedErr=\(movedErr)")
         }
+
+        // 同一窗口（如看门狗重建后重新 observe）：不重复报告，避免误取消进行中的拖拽
+        if let last = lastReportedWindow, CFEqual(last, win) { return }
+        lastReportedWindow = win
 
         let axWin = AXWindow(element: win, pid: pid)
         DispatchQueue.main.async { [weak self] in
