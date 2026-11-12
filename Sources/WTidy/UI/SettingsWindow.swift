@@ -340,7 +340,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
 
     private let orientHoriRadio = NSButton(radioButtonWithTitle: "横向排列图标", target: nil, action: nil)
     private let orientVertRadio = NSButton(radioButtonWithTitle: "纵向排列图标", target: nil, action: nil)
-    private let posPreview = ScreenPositionPreviewView(frame: NSRect(x: 0, y: 0, width: 660, height: 340))
+    private let posPreview = ScreenPositionPreviewView(frame: NSRect(x: 0, y: 0, width: 600, height: 340))
     private let posHSlider = NSSlider(value: 0.5, minValue: 0, maxValue: 1,
                                       target: nil, action: #selector(posHChanged))
     private let posVSlider = NSSlider(value: 0, minValue: 0, maxValue: 1,
@@ -368,11 +368,12 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         stack.addArrangedSubview(orientRow)
 
         stack.addArrangedSubview(sectionTitle("屏幕位置"))
-        // 原版式布局：大预览 + 横向滑杆在下方、纵向滑杆在右侧
+        // 对齐原版：滑块与排列方式联动——横向排列只显示纵向滑块（调上下），
+        // 纵向排列只显示横向滑块（调左右）；显隐在 refreshState 里切换
         posHSlider.target = self
         posHSlider.action = #selector(posHChanged)
         posHSlider.isContinuous = true
-        posHSlider.widthAnchor.constraint(equalToConstant: 660).isActive = true
+        posHSlider.widthAnchor.constraint(equalToConstant: 600).isActive = true
         posVSlider.target = self
         posVSlider.action = #selector(posVChanged)
         posVSlider.isContinuous = true
@@ -381,7 +382,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         posVSlider.heightAnchor.constraint(equalToConstant: 340).isActive = true
 
         posPreview.translatesAutoresizingMaskIntoConstraints = false
-        posPreview.widthAnchor.constraint(equalToConstant: 660).isActive = true
+        posPreview.widthAnchor.constraint(equalToConstant: 600).isActive = true
         posPreview.heightAnchor.constraint(equalToConstant: 340).isActive = true
 
         let previewColumn = NSStackView(views: [posPreview, posHSlider])
@@ -422,7 +423,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     private let qlNearCursorCheck = NSButton(checkboxWithTitle: "显示在鼠标光标附近", target: nil, action: nil)
     private let qlPosHSlider = NSSlider(value: 0.5, minValue: 0, maxValue: 1, target: nil, action: nil)
     private let qlPosVSlider = NSSlider(value: 0.5, minValue: 0, maxValue: 1, target: nil, action: nil)
-    private let qlPreview = ScreenPositionPreviewView(frame: NSRect(x: 0, y: 0, width: 660, height: 300))
+    private let qlPreview = ScreenPositionPreviewView(frame: NSRect(x: 0, y: 0, width: 600, height: 300))
     private let qlWidthField = NSTextField(string: "512")
     private let qlHeightField = NSTextField(string: "288")
 
@@ -453,7 +454,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         qlPosHSlider.target = self
         qlPosHSlider.action = #selector(qlPosHChanged)
         qlPosHSlider.isContinuous = true
-        qlPosHSlider.widthAnchor.constraint(equalToConstant: 660).isActive = true
+        qlPosHSlider.widthAnchor.constraint(equalToConstant: 600).isActive = true
         qlPosVSlider.target = self
         qlPosVSlider.action = #selector(qlPosVChanged)
         qlPosVSlider.isContinuous = true
@@ -462,7 +463,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         qlPosVSlider.heightAnchor.constraint(equalToConstant: 300).isActive = true
 
         qlPreview.translatesAutoresizingMaskIntoConstraints = false
-        qlPreview.widthAnchor.constraint(equalToConstant: 660).isActive = true
+        qlPreview.widthAnchor.constraint(equalToConstant: 600).isActive = true
         qlPreview.heightAnchor.constraint(equalToConstant: 300).isActive = true
         let qlColumn = NSStackView(views: [qlPreview, qlPosHSlider])
         qlColumn.orientation = .vertical
@@ -619,6 +620,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         // 定位页
         orientHoriRadio.state = Prefs.stripVertical ? .off : .on
         orientVertRadio.state = Prefs.stripVertical ? .on : .off
+        // 滑块与排列方式联动：横排只留纵向滑块（调上下），纵排只留横向滑块（调左右）
+        posHSlider.isHidden = !Prefs.stripVertical
+        posVSlider.isHidden = Prefs.stripVertical
         posHSlider.doubleValue = Prefs.stripPosX
         posVSlider.doubleValue = 1 - Prefs.stripPosY   // 因子 0=顶 ↔ 滑块 1=上，取反
         maxWidthField.stringValue = String(Int(Prefs.stripMaxWidth))
