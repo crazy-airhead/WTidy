@@ -213,4 +213,51 @@ struct SnapEngineTests {
         mem.remove(key: "a")
         #expect(mem.recall(key: "a") == nil)
     }
+
+    // MARK: - 图标条几何（定位页参数）
+
+    private func withPrefs<T>(_ changes: () -> Void, _ body: () -> T) -> T {
+        let saved = (Prefs.stripPosX, Prefs.stripPosY, Prefs.stripMargin, Prefs.stripMaxWidth, Prefs.stripVertical)
+        changes()
+        let result = body()
+        Prefs.stripPosX = saved.0
+        Prefs.stripPosY = saved.1
+        Prefs.stripMargin = saved.2
+        Prefs.stripMaxWidth = saved.3
+        Prefs.stripVertical = saved.4
+        return result
+    }
+
+    @Test func stripGeometryPositionFactors() {
+        withPrefs({
+            Prefs.stripPosX = 0.5
+            Prefs.stripPosY = 0
+            Prefs.stripMargin = 0
+            Prefs.stripVertical = false
+        }) {
+            let vf = CGRect(x: 0, y: 0, width: 1600, height: 1000)
+            let rects = StripGeometry.iconRects(layoutCount: 8, in: vf)
+            #expect(rects.count == 8)
+            // 横排：全部图标同一水平线；条顶贴 vf 顶，图标再缩进底卡内边距(12pt)
+            let first = rects[0]
+            #expect(close(first.maxY, vf.height - 12))
+            let union = rects.reduce(rects[0]) { $0.union($1) }
+            // 居中（posX=0.5）：左右对称
+            #expect(close(union.midX, vf.width / 2, eps: 1))
+        }
+
+        withPrefs({
+            Prefs.stripPosX = 0
+            Prefs.stripMargin = 10
+            Prefs.stripVertical = true
+        }) {
+            let vf = CGRect(x: 0, y: 0, width: 1600, height: 1000)
+            let rects = StripGeometry.iconRects(layoutCount: 4, in: vf)
+            // 纵排：x 相同，纵向排布，贴左（posX=0）且留边距
+            #expect(rects.allSatisfy { close($0.minX, rects[0].minX) })
+            #expect(rects[0].minX >= 10)
+            #expect(close(rects[0].maxY, vf.height - 10 - 12, eps: 1))   // 贴顶（posY=0）减边距与底卡内边距
+            #expect(rects[1].maxY < rects[0].minY + 0.001)          // 依次向下
+        }
+    }
 }

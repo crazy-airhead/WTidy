@@ -169,47 +169,10 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
         window(for: screen).overlayView.model = model
     }
 
-    /// 图标条摆放：方向/位置/最大宽/边距均来自「定位」页设置（对齐原版 Positioning）
+    /// 图标条摆放：几何统一走 StripGeometry（与「定位」页预览共用，预览即真实）
     private func computeStripRects(screen: NSScreen) {
-        let vf = screen.visibleFrame
-        let count = CGFloat(max(1, LayoutStore.layouts.count))
-        let margin = CGFloat(Prefs.stripMargin)
-        let maxWidth = CGFloat(Prefs.stripMaxWidth)
-
-        func fitIcons(along extent: CGFloat) -> CGFloat {
-            let available = extent - 2 * margin
-                - (count - 1) * OverlayMetrics.thumbSpacing
-            return max(OverlayMetrics.iconMinWidth, min(OverlayMetrics.iconMaxWidth, available / count))
-        }
-
-        let vertical = Prefs.stripVertical
-        let w = vertical
-            ? min(fitIcons(along: maxWidth), vf.height * 0.6)      // 纵排时用最大宽约束单图标宽
-            : fitIcons(along: min(maxWidth, vf.width))
-        let h = w * OverlayMetrics.iconAspectRatio
-
-        let totalW: CGFloat, totalH: CGFloat
-        if vertical {
-            totalW = w + 2 * OverlayMetrics.stripPadding
-            totalH = count * h + (count - 1) * OverlayMetrics.thumbSpacing + 2 * OverlayMetrics.stripPadding
-        } else {
-            totalW = count * w + (count - 1) * OverlayMetrics.thumbSpacing + 2 * OverlayMetrics.stripPadding
-            totalH = h + 2 * OverlayMetrics.stripPadding
-        }
-
-        let freeW = max(0, vf.width - margin * 2 - totalW)
-        let freeH = max(0, vf.height - margin * 2 - totalH)
-        let originX = vf.minX + margin + CGFloat(Prefs.stripPosX) * freeW
-        let originYTop = vf.maxY - margin - CGFloat(Prefs.stripPosY) * freeH   // 因子 0=贴顶
-
-        stripRectsGlobal = (0..<Int(count)).map { i in
-            let offset = CGFloat(i) * (h + OverlayMetrics.thumbSpacing)
-            let x = vertical ? originX + OverlayMetrics.stripPadding
-                             : originX + OverlayMetrics.stripPadding + CGFloat(i) * (w + OverlayMetrics.thumbSpacing)
-            let y = vertical ? originYTop - OverlayMetrics.stripPadding - offset - h
-                             : originYTop - OverlayMetrics.stripPadding - h
-            return CGRect(x: x, y: y, width: w, height: h)
-        }
+        stripRectsGlobal = StripGeometry.iconRects(layoutCount: LayoutStore.layouts.count,
+                                                   in: screen.visibleFrame)
     }
 
     /// ⌥ 键当前是否按住（对齐原版「按住 ⌥ 隐藏/显示 Layout Icons」）

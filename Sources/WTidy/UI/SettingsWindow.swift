@@ -311,20 +311,30 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         stack.addArrangedSubview(orientRow)
 
         stack.addArrangedSubview(sectionTitle("屏幕位置"))
-        posPreview.translatesAutoresizingMaskIntoConstraints = false
-        posPreview.widthAnchor.constraint(equalToConstant: 360).isActive = true
-        posPreview.heightAnchor.constraint(equalToConstant: 170).isActive = true
-        stack.addArrangedSubview(posPreview)
+        // 原版式布局：横向滑杆在预览下方、纵向滑杆在预览右侧
         posHSlider.target = self
         posHSlider.action = #selector(posHChanged)
         posHSlider.isContinuous = true
-        posHSlider.widthAnchor.constraint(equalToConstant: 360).isActive = true
+        posHSlider.widthAnchor.constraint(equalToConstant: 340).isActive = true
         posVSlider.target = self
         posVSlider.action = #selector(posVChanged)
         posVSlider.isContinuous = true
-        posVSlider.widthAnchor.constraint(equalToConstant: 360).isActive = true
-        stack.addArrangedSubview(posHSlider)
-        stack.addArrangedSubview(posVSlider)
+        posVSlider.isVertical = true
+        posVSlider.widthAnchor.constraint(equalToConstant: 24).isActive = true
+        posVSlider.heightAnchor.constraint(equalToConstant: 180).isActive = true
+
+        posPreview.translatesAutoresizingMaskIntoConstraints = false
+        posPreview.widthAnchor.constraint(equalToConstant: 340).isActive = true
+        posPreview.heightAnchor.constraint(equalToConstant: 180).isActive = true
+
+        let previewColumn = NSStackView(views: [posPreview, posHSlider])
+        previewColumn.orientation = .vertical
+        previewColumn.spacing = 8
+        previewColumn.alignment = .leading
+        let posRow = NSStackView(views: [previewColumn, posVSlider])
+        posRow.orientation = .horizontal
+        posRow.spacing = 10
+        stack.addArrangedSubview(posRow)
 
         stack.addArrangedSubview(sectionTitle("尺寸"))
         maxWidthField.target = self
@@ -355,6 +365,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let qlNearCursorCheck = NSButton(checkboxWithTitle: "显示在鼠标光标附近", target: nil, action: nil)
     private let qlPosHSlider = NSSlider(value: 0.5, minValue: 0, maxValue: 1, target: nil, action: nil)
     private let qlPosVSlider = NSSlider(value: 0.5, minValue: 0, maxValue: 1, target: nil, action: nil)
+    private let qlPreview = ScreenPositionPreviewView(frame: NSRect(x: 0, y: 0, width: 340, height: 150))
     private let qlWidthField = NSTextField(string: "512")
     private let qlHeightField = NSTextField(string: "288")
 
@@ -381,16 +392,29 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         qlNearCursorCheck.target = self
         qlNearCursorCheck.action = #selector(qlNearCursorChanged)
         stack.addArrangedSubview(qlNearCursorCheck)
+        // 原版式：横滑杆在下、纵滑杆在右 + 面板块预览
         qlPosHSlider.target = self
         qlPosHSlider.action = #selector(qlPosHChanged)
         qlPosHSlider.isContinuous = true
-        qlPosHSlider.widthAnchor.constraint(equalToConstant: 360).isActive = true
+        qlPosHSlider.widthAnchor.constraint(equalToConstant: 340).isActive = true
         qlPosVSlider.target = self
         qlPosVSlider.action = #selector(qlPosVChanged)
         qlPosVSlider.isContinuous = true
-        qlPosVSlider.widthAnchor.constraint(equalToConstant: 360).isActive = true
-        stack.addArrangedSubview(qlPosHSlider)
-        stack.addArrangedSubview(qlPosVSlider)
+        qlPosVSlider.isVertical = true
+        qlPosVSlider.widthAnchor.constraint(equalToConstant: 24).isActive = true
+        qlPosVSlider.heightAnchor.constraint(equalToConstant: 150).isActive = true
+
+        qlPreview.translatesAutoresizingMaskIntoConstraints = false
+        qlPreview.widthAnchor.constraint(equalToConstant: 340).isActive = true
+        qlPreview.heightAnchor.constraint(equalToConstant: 150).isActive = true
+        let qlColumn = NSStackView(views: [qlPreview, qlPosHSlider])
+        qlColumn.orientation = .vertical
+        qlColumn.spacing = 8
+        qlColumn.alignment = .leading
+        let qlPosRow = NSStackView(views: [qlColumn, qlPosVSlider])
+        qlPosRow.orientation = .horizontal
+        qlPosRow.spacing = 10
+        stack.addArrangedSubview(qlPosRow)
 
         stack.addArrangedSubview(sectionTitle("面板尺寸"))
         qlWidthField.target = self
@@ -546,6 +570,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         qlPosVSlider.isEnabled = !Prefs.qlNearCursor
         qlWidthField.stringValue = String(Int(Prefs.qlWidth))
         qlHeightField.stringValue = String(Int(Prefs.qlHeight))
+        qlPreview.needsDisplay = true
     }
 
     @objc private func toggleDrag() { Prefs.dragEnabled = dragCheck.state == .on }
@@ -610,8 +635,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     // MARK: - 快速布局页动作
 
     @objc private func qlNearCursorChanged() { Prefs.qlNearCursor = qlNearCursorCheck.state == .on; refreshState() }
-    @objc private func qlPosHChanged() { Prefs.qlPosX = qlPosHSlider.doubleValue }
-    @objc private func qlPosVChanged() { Prefs.qlPosY = qlPosVSlider.doubleValue }
+    @objc private func qlPosHChanged() { Prefs.qlPosX = qlPosHSlider.doubleValue; qlPreview.needsDisplay = true }
+    @objc private func qlPosVChanged() { Prefs.qlPosY = qlPosVSlider.doubleValue; qlPreview.needsDisplay = true }
     @objc private func qlWidthCommitted(_ sender: NSTextField) {
         Prefs.qlWidth = Double(sender.stringValue) ?? Prefs.qlWidth
         refreshState()
@@ -681,12 +706,22 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 }
 
 // MARK: - 屏幕位置预览（定位页 / 原版 Screen position 可视化）
+//
+// 画的是「真实」的图标条：几何与拖拽 overlay 共用 StripGeometry，
+// 图标绘制共用 LayoutIconRenderer——预览里看到的比例和位置就是拖拽时的实际效果。
 
 final class ScreenPositionPreviewView: NSView {
-    override var isFlipped: Bool { true }  // y 因子 0=顶
+    enum Mode {
+        case strip        // 布局图标条（定位页）
+        case quickLayout  // 快速布局面板块（快速布局页）
+    }
+
+    var mode: Mode = .strip {
+        didSet { needsDisplay = true }
+    }
 
     override func draw(_ dirtyRect: NSRect) {
-        // 迷你屏幕
+        // 迷你屏幕（默认坐标，原点左下，与 StripGeometry 一致）
         let screen = bounds.insetBy(dx: 10, dy: 10)
         let path = NSBezierPath(roundedRect: screen, xRadius: 10, yRadius: 10)
         NSColor.controlAccentColor.withAlphaComponent(0.16).setFill()
@@ -695,21 +730,43 @@ final class ScreenPositionPreviewView: NSView {
         path.lineWidth = 1
         path.stroke()
 
-        // 图标条块（形状按当前方向）
-        let vertical = Prefs.stripVertical
-        let w = vertical ? screen.width * 0.16 : screen.width * 0.5
-        let h = vertical ? screen.height * 0.5 : screen.height * 0.14
-        let x = screen.minX + CGFloat(Prefs.stripPosX) * (screen.width - w)
-        let y = screen.minY + CGFloat(Prefs.stripPosY) * (screen.height - h)
-        let block = NSRect(x: x, y: y, width: w, height: h)
+        // 虚拟屏幕宽 1600pt，按比例缩放绘制（让 512pt 最大宽等约束呈现真实比例）
+        let virtualWidth: CGFloat = 1600
+        let k = screen.width / virtualWidth
+        let virtualVF = CGRect(x: 0, y: 0, width: virtualWidth, height: screen.height / k)
 
-        let blockPath = NSBezierPath(roundedRect: block, xRadius: 4, yRadius: 4)
-        NSColor.controlAccentColor.withAlphaComponent(0.75).setFill()
-        blockPath.fill()
-        // 块内网格示意
-        NSColor.white.withAlphaComponent(0.7).setStroke()
-        blockPath.lineWidth = 1
-        blockPath.stroke()
+        switch mode {
+        case .strip:
+            let rects = StripGeometry.iconRects(layoutCount: LayoutStore.layouts.count, in: virtualVF)
+            let layouts = LayoutStore.layouts
+            for (i, r) in rects.enumerated() where layouts.indices.contains(i) {
+                let viewRect = CGRect(x: screen.minX + r.minX * k,
+                                      y: screen.minY + r.minY * k,
+                                      width: r.width * k,
+                                      height: r.height * k)
+                LayoutIconRenderer.draw(layout: layouts[i], in: viewRect)
+            }
+
+        case .quickLayout:
+            let w = CGFloat(Prefs.qlWidth) * k
+            let h = CGFloat(Prefs.qlHeight) * k
+            let x = screen.minX + CGFloat(Prefs.qlPosX) * max(0, screen.width - w)
+            let y = screen.maxY - CGFloat(Prefs.qlPosY) * max(0, screen.height - h) - h
+            let block = NSRect(x: x, y: y, width: w, height: h)
+            let blockPath = NSBezierPath(roundedRect: block, xRadius: 6, yRadius: 6)
+            NSColor.controlAccentColor.withAlphaComponent(0.55).setFill()
+            blockPath.fill()
+            NSColor.white.withAlphaComponent(0.8).setStroke()
+            blockPath.lineWidth = 1.5
+            blockPath.stroke()
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 10, weight: .medium),
+                .foregroundColor: NSColor.white.withAlphaComponent(0.95),
+            ]
+            let text = NSAttributedString(string: "快速布局", attributes: attrs)
+            let size = text.size()
+            text.draw(at: CGPoint(x: block.midX - size.width / 2, y: block.midY - size.height / 2))
+        }
     }
 }
 

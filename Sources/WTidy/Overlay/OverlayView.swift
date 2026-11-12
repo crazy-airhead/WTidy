@@ -74,51 +74,10 @@ final class OverlayView: NSView {
         }
 
         for (i, item) in model.strip.enumerated() {
-            let r = rects[i]
-            let hovered = (i == model.hoveredStripIndex)
-            let thumb = NSBezierPath(roundedRect: r, xRadius: 8, yRadius: 8)
-            if hovered {
-                NSColor.controlAccentColor.withAlphaComponent(0.55).setFill()
-            } else {
-                NSColor.white.withAlphaComponent(0.16).setFill()
-            }
-            thumb.fill()
-            NSColor.white.withAlphaComponent(0.75).setStroke()
-            thumb.lineWidth = hovered ? 2 : 1
-            thumb.stroke()
-
-            // 迷你区域预览（归一化 → 图标内矩形，注意 y 翻转：nr 原点在左上）
-            let showName = Prefs.showLayoutNames
-            let inner = showName ? r.insetBy(dx: 5, dy: 5).insetBy(dx: 0, dy: 7)
-                                 : r.insetBy(dx: 5, dy: 5)
-            for nr in item.layout.normalizedRects {
-                let mini = CGRect(x: inner.minX + nr.minX * inner.width,
-                                  y: inner.minY + (1 - nr.maxY) * inner.height,
-                                  width: nr.width * inner.width,
-                                  height: nr.height * inner.height)
-                let miniPath = NSBezierPath(roundedRect: mini.insetBy(dx: 1.5, dy: 1.5), xRadius: 3, yRadius: 3)
-                if hovered {
-                    NSColor.white.withAlphaComponent(0.92).setFill()
-                } else {
-                    NSColor.white.withAlphaComponent(0.5).setFill()
-                }
-                miniPath.fill()
-            }
-
-            // 名称标注（Options：「Show layout names on Layout Icons」）
-            if showName {
-                let band = CGRect(x: r.minX, y: r.maxY - 15, width: r.width, height: 15)
-                let bandPath = NSBezierPath(roundedRect: band, xRadius: 6, yRadius: 6)
-                NSColor.black.withAlphaComponent(0.55).setFill()
-                bandPath.fill()
-                let attrs: [NSAttributedString.Key: Any] = [
-                    .font: NSFont.systemFont(ofSize: 9, weight: .medium),
-                    .foregroundColor: NSColor.white.withAlphaComponent(0.95),
-                ]
-                let text = NSAttributedString(string: item.layout.name, attributes: attrs)
-                let textSize = text.size()
-                text.draw(at: CGPoint(x: band.midX - textSize.width / 2, y: band.midY - textSize.height / 2))
-            }
+            LayoutIconRenderer.draw(layout: item.layout,
+                                    in: rects[i],
+                                    hovered: i == model.hoveredStripIndex,
+                                    showName: Prefs.showLayoutNames)
         }
     }
 
@@ -153,4 +112,52 @@ enum OverlayMetrics {
     static let stripPadding: CGFloat = 12
     static let stripTopGap: CGFloat = 10
     static let stripHitInset: CGFloat = 6        // 命中外扩，更容易瞄准
+}
+
+/// 单个布局图标的绘制（overlay 条 / 定位预览 / 快速布局面板共用，保证视觉一致）
+enum LayoutIconRenderer {
+    /// 在当前绘图上下文中绘制布局图标。rect 为当前视图坐标系矩形。
+    static func draw(layout: TidyLayout, in rect: CGRect, hovered: Bool = false, showName: Bool = false) {
+        let thumb = NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8)
+        if hovered {
+            NSColor.controlAccentColor.withAlphaComponent(0.55).setFill()
+        } else {
+            NSColor.white.withAlphaComponent(0.16).setFill()
+        }
+        thumb.fill()
+        NSColor.white.withAlphaComponent(0.75).setStroke()
+        thumb.lineWidth = hovered ? 2 : 1
+        thumb.stroke()
+
+        // 迷你区域预览（归一化 → 图标内矩形，注意 y 翻转：nr 原点在左上）
+        let inner = showName ? rect.insetBy(dx: 5, dy: 5).insetBy(dx: 0, dy: 7)
+                             : rect.insetBy(dx: 5, dy: 5)
+        for nr in layout.normalizedRects {
+            let mini = CGRect(x: inner.minX + nr.minX * inner.width,
+                              y: inner.minY + (1 - nr.maxY) * inner.height,
+                              width: nr.width * inner.width,
+                              height: nr.height * inner.height)
+            let miniPath = NSBezierPath(roundedRect: mini.insetBy(dx: 1.5, dy: 1.5), xRadius: 3, yRadius: 3)
+            if hovered {
+                NSColor.white.withAlphaComponent(0.92).setFill()
+            } else {
+                NSColor.white.withAlphaComponent(0.5).setFill()
+            }
+            miniPath.fill()
+        }
+
+        if showName {
+            let band = CGRect(x: rect.minX, y: rect.maxY - 15, width: rect.width, height: 15)
+            let bandPath = NSBezierPath(roundedRect: band, xRadius: 6, yRadius: 6)
+            NSColor.black.withAlphaComponent(0.55).setFill()
+            bandPath.fill()
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 9, weight: .medium),
+                .foregroundColor: NSColor.white.withAlphaComponent(0.95),
+            ]
+            let text = NSAttributedString(string: layout.name, attributes: attrs)
+            let textSize = text.size()
+            text.draw(at: CGPoint(x: band.midX - textSize.width / 2, y: band.midY - textSize.height / 2))
+        }
+    }
 }
