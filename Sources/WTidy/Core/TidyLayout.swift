@@ -102,6 +102,8 @@ struct TidyLayout: Codable, Equatable {
         .init(id: "halves",         name: "左右半屏", cols: 2, rows: 1, regions: [.init(1, 1, 1, 1), .init(2, 1, 2, 1)]),
         .init(id: "vertical",       name: "上下半屏", cols: 1, rows: 2, regions: [.init(1, 1, 1, 1), .init(1, 2, 1, 2)]),
         .init(id: "thirds",         name: "三等分",   cols: 3, rows: 1, regions: [.init(1, 1, 1, 1), .init(2, 1, 2, 1), .init(3, 1, 3, 1)]),
+        .init(id: "leftThird",      name: "左 1/3",   cols: 3, rows: 1, regions: [.init(1, 1, 1, 1)]),
+        .init(id: "rightThird",     name: "右 1/3",   cols: 3, rows: 1, regions: [.init(3, 1, 3, 1)]),
         .init(id: "twoThirdsLeft",  name: "左 2/3",   cols: 3, rows: 1, regions: [.init(1, 1, 2, 1)]),
         .init(id: "twoThirdsRight", name: "右 2/3",   cols: 3, rows: 1, regions: [.init(2, 1, 3, 1)]),
         .init(id: "quarters",       name: "四分",     cols: 2, rows: 2, regions: [.init(1, 1, 1, 1), .init(2, 1, 2, 1), .init(1, 2, 1, 2), .init(2, 2, 2, 2)]),

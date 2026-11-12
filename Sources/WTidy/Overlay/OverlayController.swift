@@ -405,6 +405,8 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
         case ("thirds", 0): return "左 1/3"
         case ("thirds", 1): return "中 1/3"
         case ("thirds", 2): return "右 1/3"
+        case ("leftThird", _): return "左 1/3"
+        case ("rightThird", _): return "右 1/3"
         case ("twoThirdsLeft", _): return "左 2/3"
         case ("twoThirdsRight", _): return "右 2/3"
         case ("quarters", 0): return "左上 1/4"
@@ -413,7 +415,16 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
         case ("quarters", 3): return "右下 1/4"
         case ("full", _): return "最大化"
         case ("center", _): return "居中"
-        default: return layout.regions.count > 1 ? "\(layout.name) 区域\(index + 1)" : layout.name
+        default:
+            if layout.regions.count > 1 {
+                // 自动分组合并的布局（id 形如 a+b，名称形如 "甲 / 乙"）：按区域取对应名称
+                if layout.id.contains("+") {
+                    let names = layout.name.components(separatedBy: " / ")
+                    if names.indices.contains(index) { return names[index] }
+                }
+                return "\(layout.name) 区域\(index + 1)"
+            }
+            return layout.name
         }
     }
 
