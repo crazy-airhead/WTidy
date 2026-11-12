@@ -76,6 +76,7 @@ final class OverlayView: NSView {
         for (i, item) in model.strip.enumerated() {
             LayoutIconRenderer.draw(layout: item.layout,
                                     in: rects[i],
+                                    flipped: true,   // 本视图翻转坐标
                                     hovered: i == model.hoveredStripIndex,
                                     showName: Prefs.showLayoutNames)
         }
@@ -114,40 +115,91 @@ enum OverlayMetrics {
     static let stripHitInset: CGFloat = 6        // 命中外扩，更容易瞄准
 }
 
-/// 单个布局图标的绘制（overlay 条 / 定位预览 / 快速布局面板共用，保证视觉一致）
+/// 单个布局图标的绘制（overlay 条 / 定位预览 / 快速布局面板共用，保证视觉一致）。
+/// 视觉对齐原版 Layout Icons：蓝色壁纸渐变底 + 网格线 + 深色区域块。
 enum LayoutIconRenderer {
     /// 在当前绘图上下文中绘制布局图标。rect 为当前视图坐标系矩形。
-    static func draw(layout: TidyLayout, in rect: CGRect, hovered: Bool = false, showName: Bool = false) {
-        let thumb = NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8)
-        if hovered {
-            NSColor.controlAccentColor.withAlphaComponent(0.55).setFill()
-        } else {
-            NSColor.white.withAlphaComponent(0.16).setFill()
-        }
-        thumb.fill()
-        NSColor.white.withAlphaComponent(0.75).setStroke()
-        thumb.lineWidth = hovered ? 2 : 1
-        thumb.stroke()
+    /// flipped：所在视图是否翻转坐标（y 向下）——区域块的 y 映射随之变化。
+    static func draw(layout: TidyLayout, in rect: CGRect, flipped: Bool,
+                     hovered: Bool = false, showName: Bool = false) {
+        NSGraphicsContext.saveGraphicsState()
+        let clip = NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8)
+        clip.addClip()
 
-        // 迷你区域预览（归一化 → 图标内矩形，注意 y 翻转：nr 原点在左上）
-        let inner = showName ? rect.insetBy(dx: 5, dy: 5).insetBy(dx: 0, dy: 7)
-                             : rect.insetBy(dx: 5, dy: 5)
+        func cellRect(_ nr: CGRect) -> CGRect {
+            // nr 原点在左上。翻转视图（y 向下）：顶边 = minY + nr.minY*h；
+            // 非翻转视图（y 向上，如 NSImage）：顶边 = minY + (1-nr.maxY)*h。
+            let y = flipped ? rect.minY + nr.minY * rect.height
+                            : rect.minY + (1 - nr.maxY) * rect.height
+            return CGRect(x: rect.minX + nr.minX * rect.width,
+                          y: y,
+                          width: nr.width * rect.width,
+                          height: nr.height * rect.height)
+        }
+
+        // 1) 壁纸渐变底（模拟原版默认蓝色壁纸）
+        let space = NSColorSpace.deviceRGB
+        let grad = NSGradient(colors: [NSColor(red: 0.62, green: 0.78, blue: 0.94, alpha: 1),
+                                       NSColor(red: 0.36, green: 0.55, blue: 0.82, alpha: 1),
+                                       NSColor(red: 0.22, green: 0.38, blue: 0.68, alpha: 1)],
+                              atLocations: [0, 0.55, 1],
+                              colorSpace: space)
+        // 渐变方向：顶亮底深。翻转视图 angle 90=向上绘制……统一用两点式保证方向
+        grad?.draw(from: NSPoint(x: rect.minX, y: rect.maxY),   // 顶（两种坐标系都是视觉顶）
+                   to: NSPoint(x: rect.minX, y: rect.minY),
+                   options: [])
+
+        // 2) 网格线（cols×rows，细白线）
+        let cw = rect.width / CGFloat(layout.cols)
+        let ch = rect.height / CGFloat(layout.rows)
+        NSColor.white.withAlphaComponent(0.22).setStroke()
+        let grid = NSBezierPath()
+        grid.lineWidth = 0.5
+        for c in 1..<layout.cols {
+            let x = rect.minX + cw * CGFloat(c)
+            grid.move(to: CGPoint(x: x, y: rect.minY))
+            grid.line(to: CGPoint(x: x, y: rect.maxY))
+        }
+        for r in 1..<layout.rows {
+            let y = rect.minY + ch * CGFloat(r)
+            grid.move(to: CGPoint(x: rect.minX, y: y))
+            grid.line(to: CGPoint(x: rect.maxX, y: y))
+        }
+        grid.stroke()
+
+        // 3) 区域块：深色藏青圆角块 + 淡蓝描边（对齐原版区域单元的凹陷观感）
         for nr in layout.normalizedRects {
-            let mini = CGRect(x: inner.minX + nr.minX * inner.width,
-                              y: inner.minY + (1 - nr.maxY) * inner.height,
-                              width: nr.width * inner.width,
-                              height: nr.height * inner.height)
-            let miniPath = NSBezierPath(roundedRect: mini.insetBy(dx: 1.5, dy: 1.5), xRadius: 3, yRadius: 3)
-            if hovered {
-                NSColor.white.withAlphaComponent(0.92).setFill()
-            } else {
-                NSColor.white.withAlphaComponent(0.5).setFill()
-            }
-            miniPath.fill()
+            let cellPath = NSBezierPath(roundedRect: cellRect(nr).insetBy(dx: 1.5, dy: 1.5),
+                                        xRadius: 4, yRadius: 4)
+            NSColor(red: 0.07, green: 0.11, blue: 0.18, alpha: 0.92).setFill()
+            cellPath.fill()
+            NSColor(red: 0.62, green: 0.75, blue: 0.9, alpha: 0.55).setStroke()
+            cellPath.lineWidth = 1
+            cellPath.stroke()
         }
 
+        // 悬停增亮（对齐原版：选中图标变亮）
+        if hovered {
+            NSColor.white.withAlphaComponent(0.16).setFill()
+            rect.fill(using: .sourceOver)
+        }
+        NSGraphicsContext.restoreGraphicsState()
+
+        // 外框
+        let border = NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8)
+        if hovered {
+            NSColor.white.withAlphaComponent(0.95).setStroke()
+            border.lineWidth = 2
+        } else {
+            NSColor.white.withAlphaComponent(0.7).setStroke()
+            border.lineWidth = 1
+        }
+        border.stroke()
+
+        // 名称标注（Options：「Show layout names on Layout Icons」）
         if showName {
-            let band = CGRect(x: rect.minX, y: rect.maxY - 15, width: rect.width, height: 15)
+            let bandY = flipped ? rect.minY : rect.maxY - 15
+            let band = CGRect(x: rect.minX, y: bandY, width: rect.width, height: 15)
             let bandPath = NSBezierPath(roundedRect: band, xRadius: 6, yRadius: 6)
             NSColor.black.withAlphaComponent(0.55).setFill()
             bandPath.fill()

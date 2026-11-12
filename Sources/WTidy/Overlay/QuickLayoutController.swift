@@ -160,35 +160,10 @@ final class QuickIconsView: NSView {
 
         for (i, layout) in layouts.enumerated() {
             guard iconRects.indices.contains(i) else { continue }
-            let r = iconRects[i]
-            let thumb = NSBezierPath(roundedRect: r, xRadius: 8, yRadius: 8)
-            NSColor.white.withAlphaComponent(0.14).setFill()
-            thumb.fill()
-            NSColor.white.withAlphaComponent(0.75).setStroke()
-            thumb.lineWidth = 1
-            thumb.stroke()
-
-            let inner = r.insetBy(dx: 5, dy: 5)
-            for nr in layout.normalizedRects {
-                let mini = CGRect(x: inner.minX + nr.minX * inner.width,
-                                  y: inner.minY + (1 - nr.maxY) * inner.height,
-                                  width: nr.width * inner.width,
-                                  height: nr.height * inner.height)
-                let miniPath = NSBezierPath(roundedRect: mini.insetBy(dx: 1.5, dy: 1.5), xRadius: 3, yRadius: 3)
-                NSColor.white.withAlphaComponent(0.55).setFill()
-                miniPath.fill()
-            }
-
-            let band = CGRect(x: r.minX, y: r.maxY - 16, width: r.width, height: 16)
-            NSColor.black.withAlphaComponent(0.55).setFill()
-            NSBezierPath(roundedRect: band, xRadius: 6, yRadius: 6).fill()
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: 10, weight: .medium),
-                .foregroundColor: NSColor.white.withAlphaComponent(0.95),
-            ]
-            let text = NSAttributedString(string: layout.name, attributes: attrs)
-            let textSize = text.size()
-            text.draw(at: CGPoint(x: band.midX - textSize.width / 2, y: band.midY - textSize.height / 2))
+            LayoutIconRenderer.draw(layout: layout,
+                                    in: iconRects[i],
+                                    flipped: true,   // 本视图翻转坐标
+                                    showName: true)
         }
     }
 

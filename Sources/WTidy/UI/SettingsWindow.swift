@@ -22,18 +22,18 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private var hotkeyToggles: [NSButton] = []
 
     override init() {
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 580, height: 560),
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 580, height: 680),
                           styleMask: [.titled, .closable],
                           backing: .buffered, defer: false)
         super.init()
 
-        window.title = "WTidy 设置"
+        // 对齐原版窗口 chrome：标题 + 顶部 tab + 底部栏（自启勾选 + 完成按钮）
+        window.title = "WTidy 偏好设置"
         window.isReleasedWhenClosed = false
         window.delegate = self
 
-        // tab 容器：frame + autoresizing，零约束
-        tabView.frame = window.contentView!.bounds
-        tabView.autoresizingMask = [.width, .height]
+        let content = window.contentView!
+
         tabView.font = .systemFont(ofSize: 13)
         tabView.addTabViewItem(layoutsTab())
         tabView.addTabViewItem(optionsTab())
@@ -41,10 +41,42 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         tabView.addTabViewItem(quickLayoutTab())
         tabView.addTabViewItem(hotkeysTab())
         tabView.addTabViewItem(aboutTab())
-        window.contentView?.addSubview(tabView)
+
+        // 底部栏。窗口固定尺寸不可缩放，全部用静态 frame（零 Auto Layout，
+        // 规避 NSTabView 固有尺寸与窗口高度约束的冲突）
+        let width = content.bounds.width     // 580
+        let height = content.bounds.height   // 680
+        let barHeight: CGFloat = 46
+
+        let separator = NSBox()
+        separator.boxType = .separator
+        separator.frame = NSRect(x: 0, y: barHeight, width: width, height: 5)
+        separator.autoresizingMask = [.width]
+        content.addSubview(separator)
+
+        let bar = NSView()
+        bar.frame = NSRect(x: 0, y: 0, width: width, height: barHeight)
+        bar.autoresizingMask = [.width]
+        content.addSubview(bar)
+
+        loginCheck.frame = NSRect(x: 16, y: (barHeight - 24) / 2, width: 220, height: 24)
+        bar.addSubview(loginCheck)
+        let doneButton = NSButton(title: "完成", target: self, action: #selector(doneClicked))
+        doneButton.keyEquivalent = "\r"
+        doneButton.bezelStyle = .rounded
+        doneButton.frame = NSRect(x: width - 16 - 76, y: (barHeight - 28) / 2, width: 76, height: 28)
+        bar.addSubview(doneButton)
+
+        tabView.frame = NSRect(x: 12, y: barHeight + 8, width: width - 24, height: height - barHeight - 16)
+        tabView.autoresizingMask = [.width]
+        content.addSubview(tabView)
 
         wireActions()
         refreshState()
+    }
+
+    @objc private func doneClicked() {
+        window.orderOut(nil)
     }
 
     func present() {
@@ -94,10 +126,32 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
 
         for (index, layout) in LayoutStore.layouts.enumerated() {
-            let thumb = NSImageView(image: Self.thumbnail(for: layout))
+            // 原版式行：大缩略图 + 名称 + 网格区域描述 + 作用域
+            let thumb = NSImageView(image: Self.thumbnail(for: layout, size: NSSize(width: 96, height: 54)))
+
             let name = NSTextField(labelWithString: layout.name)
-            name.font = .systemFont(ofSize: 12)
-            name.widthAnchor.constraint(greaterThanOrEqualToConstant: 96).isActive = true
+            name.font = .systemFont(ofSize: 13, weight: .semibold)
+
+            let desc: String
+            if let first = layout.regions.first {
+                desc = layout.regions.count == 1
+                    ? "\(layout.cols) × \(layout.rows) 网格，从 (\(first.x1), \(first.y1)) 到 (\(first.x2), \(first.y2))"
+                    : "\(layout.cols) × \(layout.rows) 网格，\(layout.regions.count) 个区域"
+            } else {
+                desc = "\(layout.cols) × \(layout.rows) 网格"
+            }
+            let descLabel = NSTextField(labelWithString: desc)
+            descLabel.font = .systemFont(ofSize: 11)
+            descLabel.textColor = .secondaryLabelColor
+
+            let scopeLabel = NSTextField(labelWithString: layout.scope == -1 ? "所有屏幕" : "仅指定显示器")
+            scopeLabel.font = .systemFont(ofSize: 11)
+            scopeLabel.textColor = .tertiaryLabelColor
+
+            let texts = NSStackView(views: [name, descLabel, scopeLabel])
+            texts.orientation = .vertical
+            texts.alignment = .leading
+            texts.spacing = 1
 
             func smallButton(_ title: String, _ action: Selector, _ tag: Int) -> NSButton {
                 let b = NSButton(title: title, target: self, action: action)
@@ -105,7 +159,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
                 b.controlSize = .small
                 return b
             }
-
             let up = smallButton("↑", #selector(moveLayoutUp(_:)), index)
             let down = smallButton("↓", #selector(moveLayoutDown(_:)), index)
             let edit = smallButton("编辑", #selector(editLayoutClicked(_:)), index)
@@ -114,30 +167,24 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             down.isEnabled = index < LayoutStore.layouts.count - 1
 
             let flexible = NSView()
-            let row = NSStackView(views: [thumb, name, flexible, up, down, edit, remove])
+            let row = NSStackView(views: [thumb, texts, flexible, up, down, edit, remove])
             row.orientation = .horizontal
-            row.spacing = 6
+            row.spacing = 8
+            row.alignment = .centerY
             row.translatesAutoresizingMaskIntoConstraints = false
-            row.widthAnchor.constraint(equalToConstant: 500).isActive = true
+            row.widthAnchor.constraint(equalToConstant: 508).isActive = true
+            flexible.setContentHuggingPriority(.defaultLow, for: .horizontal)
             stack.addArrangedSubview(row)
         }
     }
 
-    /// 布局缩略图（归一化区域 → 位图，y 翻转：位图绘制原点在左下）
-    static func thumbnail(for layout: TidyLayout, size: NSSize = NSSize(width: 84, height: 48)) -> NSImage {
+    /// 布局缩略图：走共用渲染器（原版风壁纸网格）
+    static func thumbnail(for layout: TidyLayout, size: NSSize = NSSize(width: 104, height: 60)) -> NSImage {
         let img = NSImage(size: size)
         img.lockFocus()
-        NSColor.quaternaryLabelColor.withAlphaComponent(0.30).setFill()
-        NSBezierPath(roundedRect: NSRect(origin: .zero, size: size), xRadius: 6, yRadius: 6).fill()
-        let inner = NSRect(origin: .zero, size: size).insetBy(dx: 4, dy: 4)
-        for nr in layout.normalizedRects {
-            let r = NSRect(x: inner.minX + nr.minX * inner.width,
-                           y: inner.minY + (1 - nr.maxY) * inner.height,
-                           width: nr.width * inner.width,
-                           height: nr.height * inner.height)
-            NSColor.controlAccentColor.withAlphaComponent(0.85).setFill()
-            NSBezierPath(roundedRect: r.insetBy(dx: 1, dy: 1), xRadius: 3, yRadius: 3).fill()
-        }
+        LayoutIconRenderer.draw(layout: layout,
+                                in: NSRect(origin: .zero, size: size),
+                                flipped: false)   // NSImage 上下文原点左下
         img.unlockFocus()
         return img
     }
@@ -202,7 +249,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     /// 页面容器 + 垂直布局栈（栈用单边约束，容器尺寸由窗口/tab 决定）
     private func makePage() -> (NSView, NSStackView) {
-        let content = NSView(frame: NSRect(x: 0, y: 0, width: 580, height: 512))
+        let content = NSView(frame: NSRect(x: 0, y: 0, width: 580, height: 590))
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -263,9 +310,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         bgRow.spacing = 8
         stack.addArrangedSubview(bgRow)
         stack.setCustomSpacing(16, after: bgRow)
-
-        stack.addArrangedSubview(sectionTitle("启动"))
-        stack.addArrangedSubview(loginCheck)
 
         let warnIcon = NSImageView(image: NSImage(systemSymbolName: "exclamationmark.triangle.fill",
                                                  accessibilityDescription: nil) ?? NSImage())
@@ -759,7 +803,7 @@ final class ScreenPositionPreviewView: NSView {
                                       y: screen.minY + r.minY * k,
                                       width: r.width * k,
                                       height: r.height * k)
-                LayoutIconRenderer.draw(layout: layouts[i], in: viewRect)
+                LayoutIconRenderer.draw(layout: layouts[i], in: viewRect, flipped: false)
             }
 
         case .quickLayout:

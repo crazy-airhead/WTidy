@@ -12,7 +12,7 @@ struct SettingsRenderTests {
 
         let controller = SettingsWindowController.shared
         controller.present()
-        guard let win = NSApp.windows.first(where: { $0.title == "WTidy 设置" }) else {
+        guard let win = NSApp.windows.first(where: { $0.title == "WTidy 偏好设置" }) else {
             Issue.record("设置窗口未创建")
             return
         }
@@ -25,8 +25,10 @@ struct SettingsRenderTests {
             Issue.record("找不到 NSTabView")
             return
         }
-        #expect(abs(tab.frame.width - bounds.width) < 1, "tab 容器宽度应贴满：\(tab.frame) vs \(bounds)")
-        #expect(abs(tab.frame.height - bounds.height) < 1, "tab 容器高度应贴满")
+        #expect(abs(tab.frame.width - (bounds.width - 24)) < 1, "tab 容器宽度应贴满内容区（左右留 12）：\(tab.frame) vs \(bounds)")
+        // tab 高度 = 窗口内容高 − 底部原版式底栏（46pt 栏 + 上下 16pt 间距）
+        #expect(abs(tab.frame.height - (bounds.height - 62)) < 1,
+                "tab 容器高度应占据底栏以上区域：\(tab.frame) vs \(bounds)")
         #expect(tab.tabViewItems.count == 6, "布局/行为/定位/快速布局/快捷键/关于")
         #expect(tab.tabViewItems.map(\.label) == ["布局", "行为", "定位", "快速布局", "快捷键", "关于"])
 
