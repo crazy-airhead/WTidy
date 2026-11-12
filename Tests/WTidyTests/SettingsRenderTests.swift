@@ -50,7 +50,7 @@ struct SettingsRenderTests {
 
         // 3) 行为页：第一个分组框应靠页面顶部，框内应含功能开关
         let boxes = stack.arrangedSubviews.compactMap { $0 as? NSBox }
-        #expect(boxes.count == 3, "行为页应有 3 个分组框（行为/窗口调整/背景），实际 \(boxes.count)")
+        #expect(boxes.count == 4, "行为页应有 4 个分组框（行为/窗口调整/配色/背景），实际 \(boxes.count)")
         if let firstBox = boxes.first {
             let f = general.convert(firstBox.frame, from: stack)
             #expect(f.maxY > general.bounds.height * 0.7, "第一个分组框应靠页面顶部，实际 \(f)")

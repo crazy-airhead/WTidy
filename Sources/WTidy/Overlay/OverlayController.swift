@@ -158,7 +158,11 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
         }
 
         if stripShouldShow {
-            model.strip = zip(stripRectsGlobal, visibleLayouts).map { (rect: $0, layout: $1) }
+            model.strip = stripRectsGlobal.indices.map { i in
+                (rect: stripRectsGlobal[i],
+                 layout: visibleLayouts[i],
+                 activeRegion: hoveredStrip == i ? activeZoneIndex : nil)
+            }
         } else {
             model.strip = []
         }

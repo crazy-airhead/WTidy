@@ -1,9 +1,57 @@
 import AppKit
 
+/// 拖拽图标条 / 快速布局面板的配色主题（行为页「图标条配色」可选）
+enum StripTheme {
+    case ink       // 墨蓝：深藏青底 + 雾蓝块（默认，替代纯白）
+    case graphite  // 石墨：炭灰底 + 银灰块
+    case teal      // 青碧：深青底 + 青碧块
+    case violet    // 紫罗兰：深紫底 + 淡紫块
+
+    static func at(_ index: Int) -> StripTheme {
+        [StripTheme.ink, .graphite, .teal, .violet][max(0, min(3, index))]
+    }
+
+    var bgColors: [NSColor] {
+        switch self {
+        case .ink:     return [NSColor(red: 0.13, green: 0.17, blue: 0.26, alpha: 1),
+                              NSColor(red: 0.09, green: 0.12, blue: 0.19, alpha: 1)]
+        case .graphite: return [NSColor(red: 0.18, green: 0.18, blue: 0.19, alpha: 1),
+                                NSColor(red: 0.11, green: 0.11, blue: 0.12, alpha: 1)]
+        case .teal:    return [NSColor(red: 0.05, green: 0.17, blue: 0.19, alpha: 1),
+                               NSColor(red: 0.03, green: 0.11, blue: 0.13, alpha: 1)]
+        case .violet:  return [NSColor(red: 0.16, green: 0.10, blue: 0.25, alpha: 1),
+                               NSColor(red: 0.10, green: 0.06, blue: 0.17, alpha: 1)]
+        }
+    }
+
+    var cellFill: NSColor {
+        switch self {
+        case .ink:     return NSColor(red: 0.44, green: 0.65, blue: 0.94, alpha: 0.92)
+        case .graphite: return NSColor(red: 0.82, green: 0.82, blue: 0.84, alpha: 0.88)
+        case .teal:    return NSColor(red: 0.25, green: 0.78, blue: 0.74, alpha: 0.92)
+        case .violet:  return NSColor(red: 0.71, green: 0.55, blue: 0.95, alpha: 0.92)
+        }
+    }
+
+    var cellStroke: NSColor {
+        NSColor.white.withAlphaComponent(0.30)
+    }
+
+    /// 悬停投影命中的区域块（更亮，用于「拖到这里了」的即时反馈）
+    var activeCellFill: NSColor {
+        switch self {
+        case .ink:     return NSColor(red: 0.62, green: 0.80, blue: 1.00, alpha: 1)
+        case .graphite: return NSColor(red: 1.00, green: 1.00, blue: 1.00, alpha: 1)
+        case .teal:    return NSColor(red: 0.55, green: 0.95, blue: 0.90, alpha: 1)
+        case .violet:  return NSColor(red: 0.85, green: 0.72, blue: 1.00, alpha: 1)
+        }
+    }
+}
+
 /// Overlay 的全部绘制状态（矩形均为 AppKit 全局屏幕坐标，由 view 自行转换）
 struct OverlayModel {
-    /// 布局图标条：每项 { 图标rect, 布局 }（布局用于绘制迷你区域预览）
-    var strip: [(rect: CGRect, layout: TidyLayout)] = []
+    /// 顶部布局缩略图条：每项 { 图标rect, 布局, 投影命中的区域下标 }
+    var strip: [(rect: CGRect, layout: TidyLayout, activeRegion: Int?)] = []
     var hoveredStripIndex: Int? = nil
 
     /// 展开态：整屏暗纱 + 当前布局分区落点预览
@@ -78,7 +126,8 @@ final class OverlayView: NSView {
                                     in: rects[i],
                                     flipped: true,   // 本视图翻转坐标
                                     hovered: i == model.hoveredStripIndex,
-                                    showName: Prefs.showLayoutNames)
+                                    showName: Prefs.showLayoutNames,
+                                    activeRegion: item.activeRegion)
         }
     }
 
@@ -126,9 +175,13 @@ enum LayoutIconRenderer {
 
     /// 在当前绘图上下文中绘制布局图标。rect 为当前视图坐标系矩形。
     /// flipped：所在视图是否翻转坐标（y 向下）——区域块的 y 映射随之变化。
+    /// theme：.dark 风格下的配色主题（行为页「图标条配色」）。
+    /// activeRegion：投影命中的区域下标——该区域块以高亮色绘制（「拖到这里了」的即时反馈）。
     static func draw(layout: TidyLayout, in rect: CGRect, flipped: Bool,
                      style: Style = .dark,
-                     hovered: Bool = false, showName: Bool = false) {
+                     hovered: Bool = false, showName: Bool = false,
+                     theme: StripTheme = .at(Prefs.stripTheme),
+                     activeRegion: Int? = nil) {
         NSGraphicsContext.saveGraphicsState()
         let clip = NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8)
         clip.addClip()
@@ -147,16 +200,17 @@ enum LayoutIconRenderer {
         // 1) 底色渐变（视觉顶→底）
         let space = NSColorSpace.deviceRGB
         let colors: [NSColor]
+        let locations: [CGFloat]
         switch style {
         case .dark:
-            colors = [NSColor(red: 0.17, green: 0.21, blue: 0.30, alpha: 1),
-                      NSColor(red: 0.11, green: 0.14, blue: 0.21, alpha: 1)]
+            colors = theme.bgColors
+            locations = [0, 1]
         case .light:
             colors = [NSColor(red: 0.80, green: 0.87, blue: 0.95, alpha: 1),
                       NSColor(red: 0.52, green: 0.67, blue: 0.86, alpha: 1),
                       NSColor(red: 0.34, green: 0.50, blue: 0.76, alpha: 1)]
+            locations = [0, 0.55, 1]
         }
-        let locations: [CGFloat] = style == .dark ? [0, 1] : [0, 0.55, 1]
         let grad = NSGradient(colors: colors, atLocations: locations, colorSpace: space)
         grad?.draw(from: NSPoint(x: rect.minX, y: rect.maxY),   // 顶（两种坐标系都是视觉顶）
                    to: NSPoint(x: rect.minX, y: rect.minY),
@@ -180,14 +234,19 @@ enum LayoutIconRenderer {
         }
         grid.stroke()
 
-        // 3) 区域块
-        for nr in layout.normalizedRects {
+        // 3) 区域块：投影命中的区域用高亮色（拖到哪亮到哪）
+        for (ri, nr) in layout.normalizedRects.enumerated() {
             let cellPath = NSBezierPath(roundedRect: cellRect(nr).insetBy(dx: 1.5, dy: 1.5),
                                         xRadius: 4, yRadius: 4)
             switch style {
             case .dark:
-                NSColor.white.withAlphaComponent(0.88).setFill()
-                NSColor.white.withAlphaComponent(0.35).setStroke()
+                if ri == activeRegion {
+                    theme.activeCellFill.setFill()
+                    NSColor.white.withAlphaComponent(0.55).setStroke()
+                } else {
+                    theme.cellFill.setFill()
+                    theme.cellStroke.setStroke()
+                }
             case .light:
                 NSColor(red: 0.09, green: 0.14, blue: 0.23, alpha: 0.94).setFill()
                 NSColor(red: 0.38, green: 0.68, blue: 0.95, alpha: 0.85).setStroke()
