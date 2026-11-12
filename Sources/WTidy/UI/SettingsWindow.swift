@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 
 /// 设置窗口。
 /// 故意不用 Auto Layout 撑尺寸：NSTabView 直接 autoresizing 贴满窗口内容区，
@@ -35,7 +36,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         tabView.autoresizingMask = [.width, .height]
         tabView.font = .systemFont(ofSize: 13)
         tabView.addTabViewItem(layoutsTab())
-        tabView.addTabViewItem(generalTab())
+        tabView.addTabViewItem(optionsTab())
+        tabView.addTabViewItem(positioningTab())
+        tabView.addTabViewItem(quickLayoutTab())
         tabView.addTabViewItem(hotkeysTab())
         tabView.addTabViewItem(aboutTab())
         window.contentView?.addSubview(tabView)
@@ -216,18 +219,44 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         return (content, stack)
     }
 
-    private func generalTab() -> NSTabViewItem {
+    // MARK: - 行为页（原版 Options）
+
+    private let optionHideRadio = NSButton(radioButtonWithTitle: "按住 ⌥ 隐藏布局图标", target: nil, action: nil)
+    private let optionShowRadio = NSButton(radioButtonWithTitle: "按住 ⌥ 显示布局图标", target: nil, action: nil)
+    private let optionOffRadio = NSButton(radioButtonWithTitle: "不使用 ⌥ 键", target: nil, action: nil)
+    private let statusIconCheck = NSButton(checkboxWithTitle: "显示菜单栏状态图标", target: nil, action: nil)
+    private let namesCheck = NSButton(checkboxWithTitle: "在布局图标上显示名称", target: nil, action: nil)
+    private let warnCheck = NSButton(checkboxWithTitle: "窗口未能调整尺寸时显示警告", target: nil, action: nil)
+
+    private func optionsTab() -> NSTabViewItem {
         let (content, stack) = makePage()
 
-        let gapCaption = captionText("贴合为原版 Window Tidy 的行为；间距可让相邻窗口留出呼吸感。")
         stack.addArrangedSubview(sectionTitle("功能"))
         stack.addArrangedSubview(dragCheck)
         stack.addArrangedSubview(hotkeyCheck)
-        stack.setCustomSpacing(18, after: hotkeyCheck)
-        stack.addArrangedSubview(sectionTitle("窗口间隙"))
-        stack.addArrangedSubview(gapSegment)
-        stack.addArrangedSubview(gapCaption)
-        stack.setCustomSpacing(18, after: gapCaption)
+
+        stack.addArrangedSubview(sectionTitle("⌥ 键"))
+        for radio in [optionHideRadio, optionShowRadio, optionOffRadio] {
+            radio.target = self
+            radio.action = #selector(optionKeyModeChanged)
+            stack.addArrangedSubview(radio)
+        }
+
+        stack.addArrangedSubview(sectionTitle("显示"))
+        stack.addArrangedSubview(statusIconCheck)
+        stack.addArrangedSubview(namesCheck)
+        stack.addArrangedSubview(warnCheck)
+        stack.setCustomSpacing(16, after: warnCheck)
+
+        stack.addArrangedSubview(sectionTitle("图标条背景"))
+        let bgDefault = NSButton(title: "默认深色", target: self, action: #selector(bgDefaultClicked))
+        let bgWallpaper = NSButton(title: "使用桌面壁纸", target: self, action: #selector(bgWallpaperClicked))
+        let bgRow = NSStackView(views: [bgDefault, bgWallpaper])
+        bgRow.orientation = .horizontal
+        bgRow.spacing = 8
+        stack.addArrangedSubview(bgRow)
+        stack.setCustomSpacing(16, after: bgRow)
+
         stack.addArrangedSubview(sectionTitle("启动"))
         stack.addArrangedSubview(loginCheck)
 
@@ -244,8 +273,139 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         permissionRow.addArrangedSubview(grantButton)
         stack.addArrangedSubview(permissionRow)
 
-        let item = NSTabViewItem(identifier: "general")
-        item.label = "通用"
+        let item = NSTabViewItem(identifier: "options")
+        item.label = "行为"
+        item.view = content
+        return item
+    }
+
+    // MARK: - 定位页（原版 Positioning）
+
+    private let orientHoriRadio = NSButton(radioButtonWithTitle: "横向排列图标", target: nil, action: nil)
+    private let orientVertRadio = NSButton(radioButtonWithTitle: "纵向排列图标", target: nil, action: nil)
+    private let posPreview = ScreenPositionPreviewView(frame: NSRect(x: 0, y: 0, width: 360, height: 180))
+    private let posHSlider = NSSlider(value: 0.5, minValue: 0, maxValue: 1,
+                                      target: nil, action: #selector(posHChanged))
+    private let posVSlider = NSSlider(value: 0, minValue: 0, maxValue: 1,
+                                      target: nil, action: #selector(posVChanged))
+    private let maxWidthField = NSTextField(string: "512")
+    private let marginField = NSTextField(string: "0")
+
+    private func positioningTab() -> NSTabViewItem {
+        let (content, stack) = makePage()
+
+        func label(_ t: String) -> NSTextField {
+            let f = NSTextField(labelWithString: t)
+            f.font = .systemFont(ofSize: 12)
+            return f
+        }
+
+        stack.addArrangedSubview(sectionTitle("排列方向"))
+        orientHoriRadio.target = self
+        orientHoriRadio.action = #selector(orientationChanged)
+        orientVertRadio.target = self
+        orientVertRadio.action = #selector(orientationChanged)
+        let orientRow = NSStackView(views: [orientHoriRadio, orientVertRadio])
+        orientRow.orientation = .horizontal
+        orientRow.spacing = 16
+        stack.addArrangedSubview(orientRow)
+
+        stack.addArrangedSubview(sectionTitle("屏幕位置"))
+        posPreview.translatesAutoresizingMaskIntoConstraints = false
+        posPreview.widthAnchor.constraint(equalToConstant: 360).isActive = true
+        posPreview.heightAnchor.constraint(equalToConstant: 170).isActive = true
+        stack.addArrangedSubview(posPreview)
+        posHSlider.target = self
+        posHSlider.action = #selector(posHChanged)
+        posHSlider.isContinuous = true
+        posHSlider.widthAnchor.constraint(equalToConstant: 360).isActive = true
+        posVSlider.target = self
+        posVSlider.action = #selector(posVChanged)
+        posVSlider.isContinuous = true
+        posVSlider.widthAnchor.constraint(equalToConstant: 360).isActive = true
+        stack.addArrangedSubview(posHSlider)
+        stack.addArrangedSubview(posVSlider)
+
+        stack.addArrangedSubview(sectionTitle("尺寸"))
+        maxWidthField.target = self
+        maxWidthField.action = #selector(maxWidthCommitted)
+        marginField.target = self
+        marginField.action = #selector(marginCommitted)
+        maxWidthField.widthAnchor.constraint(equalToConstant: 70).isActive = true
+        marginField.widthAnchor.constraint(equalToConstant: 70).isActive = true
+        let dimsRow = NSStackView(views: [label("最大宽度"), maxWidthField, label("边距"), marginField])
+        dimsRow.orientation = .horizontal
+        dimsRow.spacing = 8
+        stack.addArrangedSubview(dimsRow)
+
+        stack.addArrangedSubview(sectionTitle("窗口间隙"))
+        gapSegment.translatesAutoresizingMaskIntoConstraints = false
+        stack.addArrangedSubview(gapSegment)
+        stack.addArrangedSubview(captionText("贴合为原版 Window Tidy 的行为；间距可让相邻窗口留出呼吸感。"))
+
+        let item = NSTabViewItem(identifier: "positioning")
+        item.label = "定位"
+        item.view = content
+        return item
+    }
+
+    // MARK: - 快速布局页（原版 Quick Layout）
+
+    private let qlRecorder = HotkeyRecorderButton(title: "")
+    private let qlNearCursorCheck = NSButton(checkboxWithTitle: "显示在鼠标光标附近", target: nil, action: nil)
+    private let qlPosHSlider = NSSlider(value: 0.5, minValue: 0, maxValue: 1, target: nil, action: nil)
+    private let qlPosVSlider = NSSlider(value: 0.5, minValue: 0, maxValue: 1, target: nil, action: nil)
+    private let qlWidthField = NSTextField(string: "512")
+    private let qlHeightField = NSTextField(string: "288")
+
+    private func quickLayoutTab() -> NSTabViewItem {
+        let (content, stack) = makePage()
+
+        func label(_ t: String) -> NSTextField {
+            let f = NSTextField(labelWithString: t)
+            f.font = .systemFont(ofSize: 12)
+            return f
+        }
+
+        stack.addArrangedSubview(sectionTitle("激活"))
+        stack.addArrangedSubview(captionText("全局快捷键呼出快速布局面板：点选图标即把前台窗口吸到对应区域（含图标内投影选区）。Esc 或点击面板外关闭。"))
+        qlRecorder.onRecord = { [weak self] keyCode, modifiers in
+            Prefs.qlKeyCode = keyCode
+            Prefs.qlModifiers = modifiers
+            self?.refreshState()
+        }
+        qlRecorder.widthAnchor.constraint(equalToConstant: 260).isActive = true
+        stack.addArrangedSubview(qlRecorder)
+
+        stack.addArrangedSubview(sectionTitle("面板位置"))
+        qlNearCursorCheck.target = self
+        qlNearCursorCheck.action = #selector(qlNearCursorChanged)
+        stack.addArrangedSubview(qlNearCursorCheck)
+        qlPosHSlider.target = self
+        qlPosHSlider.action = #selector(qlPosHChanged)
+        qlPosHSlider.isContinuous = true
+        qlPosHSlider.widthAnchor.constraint(equalToConstant: 360).isActive = true
+        qlPosVSlider.target = self
+        qlPosVSlider.action = #selector(qlPosVChanged)
+        qlPosVSlider.isContinuous = true
+        qlPosVSlider.widthAnchor.constraint(equalToConstant: 360).isActive = true
+        stack.addArrangedSubview(qlPosHSlider)
+        stack.addArrangedSubview(qlPosVSlider)
+
+        stack.addArrangedSubview(sectionTitle("面板尺寸"))
+        qlWidthField.target = self
+        qlWidthField.action = #selector(qlWidthCommitted)
+        qlHeightField.target = self
+        qlHeightField.action = #selector(qlHeightCommitted)
+        qlWidthField.widthAnchor.constraint(equalToConstant: 70).isActive = true
+        qlHeightField.widthAnchor.constraint(equalToConstant: 70).isActive = true
+        let dimsRow = NSStackView(views: [label("宽度"), qlWidthField, label("高度"), qlHeightField])
+        dimsRow.orientation = .horizontal
+        dimsRow.spacing = 8
+        stack.addArrangedSubview(dimsRow)
+
+        let item = NSTabViewItem(identifier: "quicklayout")
+        item.label = "快速布局"
         item.view = content
         return item
     }
@@ -332,6 +492,14 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         loginCheck.action = #selector(toggleLogin)
         gapSegment.target = self
         gapSegment.action = #selector(gapChanged)
+        statusIconCheck.target = self
+        statusIconCheck.action = #selector(statusIconChanged)
+        namesCheck.target = self
+        namesCheck.action = #selector(namesChanged)
+        warnCheck.target = self
+        warnCheck.action = #selector(warnChanged)
+        qlNearCursorCheck.target = self
+        qlNearCursorCheck.action = #selector(qlNearCursorChanged)
     }
 
     private func refreshState() {
@@ -351,6 +519,33 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             guard let id = toggle.identifier?.rawValue else { continue }
             toggle.state = Prefs.hotkeyEnabled(id) ? .on : .off
         }
+
+        // 行为页
+        optionHideRadio.state = Prefs.optionKeyMode == 0 ? .on : .off
+        optionShowRadio.state = Prefs.optionKeyMode == 1 ? .on : .off
+        optionOffRadio.state = Prefs.optionKeyMode == 2 ? .on : .off
+        statusIconCheck.state = Prefs.showStatusIcon ? .on : .off
+        namesCheck.state = Prefs.showLayoutNames ? .on : .off
+        warnCheck.state = Prefs.warnOnFail ? .on : .off
+
+        // 定位页
+        orientHoriRadio.state = Prefs.stripVertical ? .off : .on
+        orientVertRadio.state = Prefs.stripVertical ? .on : .off
+        posHSlider.doubleValue = Prefs.stripPosX
+        posVSlider.doubleValue = Prefs.stripPosY
+        maxWidthField.stringValue = String(Int(Prefs.stripMaxWidth))
+        marginField.stringValue = String(Int(Prefs.stripMargin))
+        posPreview.needsDisplay = true
+
+        // 快速布局页
+        qlRecorder.title = Self.hotkeyDisplay(keyCode: Prefs.qlKeyCode, modifiers: Prefs.qlModifiers)
+        qlNearCursorCheck.state = Prefs.qlNearCursor ? .on : .off
+        qlPosHSlider.doubleValue = Prefs.qlPosX
+        qlPosVSlider.doubleValue = Prefs.qlPosY
+        qlPosHSlider.isEnabled = !Prefs.qlNearCursor
+        qlPosVSlider.isEnabled = !Prefs.qlNearCursor
+        qlWidthField.stringValue = String(Int(Prefs.qlWidth))
+        qlHeightField.stringValue = String(Int(Prefs.qlHeight))
     }
 
     @objc private func toggleDrag() { Prefs.dragEnabled = dragCheck.state == .on }
@@ -374,6 +569,82 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
     @objc private func grantClicked() { AccessibilityService.requestTrust() }
     @objc private func openLogClicked() { NSWorkspace.shared.open(AppLog.shared.logPath) }
+
+    // MARK: - 行为页动作
+
+    @objc private func optionKeyModeChanged() {
+        if optionHideRadio.state == .on { Prefs.optionKeyMode = 0 }
+        else if optionShowRadio.state == .on { Prefs.optionKeyMode = 1 }
+        else if optionOffRadio.state == .on { Prefs.optionKeyMode = 2 }
+    }
+
+    @objc private func statusIconChanged() { Prefs.showStatusIcon = statusIconCheck.state == .on }
+    @objc private func namesChanged() { Prefs.showLayoutNames = namesCheck.state == .on }
+    @objc private func warnChanged() { Prefs.warnOnFail = warnCheck.state == .on }
+    @objc private func bgDefaultClicked() { Prefs.stripBackground = 0 }
+    @objc private func bgWallpaperClicked() { Prefs.stripBackground = 1 }
+
+    // MARK: - 定位页动作
+
+    @objc private func orientationChanged() {
+        Prefs.stripVertical = orientVertRadio.state == .on
+        posPreview.needsDisplay = true
+    }
+    @objc private func posHChanged() {
+        Prefs.stripPosX = posHSlider.doubleValue
+        posPreview.needsDisplay = true
+    }
+    @objc private func posVChanged() {
+        Prefs.stripPosY = posVSlider.doubleValue
+        posPreview.needsDisplay = true
+    }
+    @objc private func maxWidthCommitted(_ sender: NSTextField) {
+        Prefs.stripMaxWidth = Double(sender.stringValue) ?? Prefs.stripMaxWidth
+        refreshState()
+    }
+    @objc private func marginCommitted(_ sender: NSTextField) {
+        Prefs.stripMargin = Double(sender.stringValue) ?? Prefs.stripMargin
+        refreshState()
+    }
+
+    // MARK: - 快速布局页动作
+
+    @objc private func qlNearCursorChanged() { Prefs.qlNearCursor = qlNearCursorCheck.state == .on; refreshState() }
+    @objc private func qlPosHChanged() { Prefs.qlPosX = qlPosHSlider.doubleValue }
+    @objc private func qlPosVChanged() { Prefs.qlPosY = qlPosVSlider.doubleValue }
+    @objc private func qlWidthCommitted(_ sender: NSTextField) {
+        Prefs.qlWidth = Double(sender.stringValue) ?? Prefs.qlWidth
+        refreshState()
+    }
+    @objc private func qlHeightCommitted(_ sender: NSTextField) {
+        Prefs.qlHeight = Double(sender.stringValue) ?? Prefs.qlHeight
+        refreshState()
+    }
+
+    /// Carbon 键码 → 可读符号（常用键位映射，未收录的回退为 Key#）
+    static func hotkeyDisplay(keyCode: UInt32, modifiers: Int) -> String {
+        let base: String
+        switch keyCode {
+        case 0: base = "A"; case 1: base = "S"; case 2: base = "D"; case 3: base = "F"
+        case 4: base = "H"; case 5: base = "G"; case 6: base = "Z"; case 7: base = "X"
+        case 8: base = "C"; case 9: base = "V"; case 11: base = "B"; case 12: base = "Q"
+        case 13: base = "W"; case 14: base = "E"; case 15: base = "R"; case 16: base = "Y"
+        case 17: base = "T"; case 31: base = "O"; case 32: base = "U"; case 34: base = "I"
+        case 35: base = "P"; case 37: base = "L"; case 38: base = "J"; case 40: base = "K"
+        case 45: base = "N"; case 46: base = "M"
+        case 18: base = "1"; case 19: base = "2"; case 20: base = "3"; case 21: base = "4"
+        case 23: base = "5"; case 22: base = "6"; case 26: base = "7"; case 28: base = "8"
+        case 25: base = "9"; case 29: base = "0"
+        case 123: base = "←"; case 124: base = "→"; case 125: base = "↓"; case 126: base = "↑"
+        case 49: base = "Space"; case 36: base = "↩"; case 48: base = "⇥"
+        default: base = "Key(\(keyCode))"
+        }
+        let ctrl = modifiers & controlKey != 0 ? "⌃" : ""
+        let opt = modifiers & optionKey != 0 ? "⌥" : ""
+        let cmd = modifiers & cmdKey != 0 ? "⌘" : ""
+        let shift = modifiers & shiftKey != 0 ? "⇧" : ""
+        return ctrl + opt + cmd + shift + base
+    }
 
     func windowDidBecomeKey(_ notification: Notification) {
         refreshState()
@@ -406,6 +677,93 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         field.layer?.masksToBounds = true
         field.widthAnchor.constraint(equalToConstant: max(48, CGFloat(text.count) * 10 + 18)).isActive = true
         return field
+    }
+}
+
+// MARK: - 屏幕位置预览（定位页 / 原版 Screen position 可视化）
+
+final class ScreenPositionPreviewView: NSView {
+    override var isFlipped: Bool { true }  // y 因子 0=顶
+
+    override func draw(_ dirtyRect: NSRect) {
+        // 迷你屏幕
+        let screen = bounds.insetBy(dx: 10, dy: 10)
+        let path = NSBezierPath(roundedRect: screen, xRadius: 10, yRadius: 10)
+        NSColor.controlAccentColor.withAlphaComponent(0.16).setFill()
+        path.fill()
+        NSColor.separatorColor.setStroke()
+        path.lineWidth = 1
+        path.stroke()
+
+        // 图标条块（形状按当前方向）
+        let vertical = Prefs.stripVertical
+        let w = vertical ? screen.width * 0.16 : screen.width * 0.5
+        let h = vertical ? screen.height * 0.5 : screen.height * 0.14
+        let x = screen.minX + CGFloat(Prefs.stripPosX) * (screen.width - w)
+        let y = screen.minY + CGFloat(Prefs.stripPosY) * (screen.height - h)
+        let block = NSRect(x: x, y: y, width: w, height: h)
+
+        let blockPath = NSBezierPath(roundedRect: block, xRadius: 4, yRadius: 4)
+        NSColor.controlAccentColor.withAlphaComponent(0.75).setFill()
+        blockPath.fill()
+        // 块内网格示意
+        NSColor.white.withAlphaComponent(0.7).setStroke()
+        blockPath.lineWidth = 1
+        blockPath.stroke()
+    }
+}
+
+// MARK: - 全局快捷键录制按钮（原版「Click to record shortcut」）
+
+final class HotkeyRecorderButton: NSButton {
+    var onRecord: ((UInt32, Int) -> Void)?
+    private var monitor: Any?
+    private var previousTitle = ""
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        bezelStyle = .rounded
+    }
+
+    convenience init(title: String) {
+        self.init(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+        self.title = title
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) 未实现") }
+
+    override func mouseDown(with event: NSEvent) {
+        startRecording()
+    }
+
+    private func startRecording() {
+        guard monitor == nil else { return }
+        previousTitle = title
+        title = "请按下快捷键…（Esc 取消，需含修饰键）"
+
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self = self else { return event }
+            if event.keyCode == 53 {  // Esc 取消
+                self.stopRecording()
+                return nil
+            }
+            var carbon: Int = 0
+            if event.modifierFlags.contains(.command) { carbon |= cmdKey }
+            if event.modifierFlags.contains(.option) { carbon |= optionKey }
+            if event.modifierFlags.contains(.control) { carbon |= controlKey }
+            if event.modifierFlags.contains(.shift) { carbon |= shiftKey }
+            guard carbon != 0 else { return nil }  // 无修饰键的按键直接吞掉
+
+            self.onRecord?(UInt32(event.keyCode), carbon)
+            self.stopRecording()
+            return nil
+        }
+    }
+
+    private func stopRecording() {
+        monitor.map { NSEvent.removeMonitor($0) }
+        monitor = nil
+        title = previousTitle
     }
 }
 

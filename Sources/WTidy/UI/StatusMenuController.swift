@@ -13,6 +13,7 @@ final class StatusMenuController: NSObject {
         var openSettings: () -> Void
         var requestPermissions: () -> Void
         var restart: () -> Void
+        var showQuickLayout: () -> Void
     }
 
     private let statusItem: NSStatusItem
@@ -54,6 +55,9 @@ final class StatusMenuController: NSObject {
         loginToggle.isEnabled = true
         menu.addItem(loginToggle)
 
+        let quickItem = NSMenuItem(title: "快速布局", action: #selector(showQuickLayout), keyEquivalent: "l")
+        quickItem.target = self
+        menu.addItem(quickItem)
         let settingsItem = NSMenuItem(title: "设置…", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
@@ -141,6 +145,13 @@ final class StatusMenuController: NSObject {
     }
 
     @objc private func openSettings() { hooks?.openSettings() }
+
+    @objc private func showQuickLayout() { hooks?.showQuickLayout() }
+
+    /// Options：「Show Window Tidy status icon」
+    func setVisible(_ visible: Bool) {
+        statusItem.isVisible = visible
+    }
 
     @objc private func openLog() {
         NSWorkspace.shared.open(AppLog.shared.logPath)

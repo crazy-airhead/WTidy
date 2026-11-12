@@ -58,10 +58,20 @@ final class OverlayView: NSView {
         let union = rects.reduce(rects[0]) { $0.union($1) }
         let card = union.insetBy(dx: -OverlayMetrics.stripPadding, dy: -OverlayMetrics.stripPadding)
 
-        // 底卡
+        // 底卡（对齐原版 Background：默认深色 / 桌面壁纸）
         let cardPath = NSBezierPath(roundedRect: card, xRadius: 14, yRadius: 14)
-        NSColor.black.withAlphaComponent(0.58).setFill()
-        cardPath.fill()
+        if Prefs.stripBackground == 1, let wallpaper = wallpaperImage() {
+            NSGraphicsContext.saveGraphicsState()
+            let clip = NSBezierPath(roundedRect: card, xRadius: 14, yRadius: 14)
+            clip.addClip()
+            wallpaper.draw(in: card, from: .zero, operation: .sourceOver, fraction: 1)
+            NSColor.black.withAlphaComponent(0.45).setFill()
+            card.fill(using: .sourceOver)
+            NSGraphicsContext.restoreGraphicsState()
+        } else {
+            NSColor.black.withAlphaComponent(0.58).setFill()
+            cardPath.fill()
+        }
 
         for (i, item) in model.strip.enumerated() {
             let r = rects[i]
@@ -78,7 +88,9 @@ final class OverlayView: NSView {
             thumb.stroke()
 
             // 迷你区域预览（归一化 → 图标内矩形，注意 y 翻转：nr 原点在左上）
-            let inner = r.insetBy(dx: 5, dy: 5)
+            let showName = Prefs.showLayoutNames
+            let inner = showName ? r.insetBy(dx: 5, dy: 5).insetBy(dx: 0, dy: 7)
+                                 : r.insetBy(dx: 5, dy: 5)
             for nr in item.layout.normalizedRects {
                 let mini = CGRect(x: inner.minX + nr.minX * inner.width,
                                   y: inner.minY + (1 - nr.maxY) * inner.height,
@@ -92,7 +104,36 @@ final class OverlayView: NSView {
                 }
                 miniPath.fill()
             }
+
+            // 名称标注（Options：「Show layout names on Layout Icons」）
+            if showName {
+                let band = CGRect(x: r.minX, y: r.maxY - 15, width: r.width, height: 15)
+                let bandPath = NSBezierPath(roundedRect: band, xRadius: 6, yRadius: 6)
+                NSColor.black.withAlphaComponent(0.55).setFill()
+                bandPath.fill()
+                let attrs: [NSAttributedString.Key: Any] = [
+                    .font: NSFont.systemFont(ofSize: 9, weight: .medium),
+                    .foregroundColor: NSColor.white.withAlphaComponent(0.95),
+                ]
+                let text = NSAttributedString(string: item.layout.name, attributes: attrs)
+                let textSize = text.size()
+                text.draw(at: CGPoint(x: band.midX - textSize.width / 2, y: band.midY - textSize.height / 2))
+            }
         }
+    }
+
+    /// 桌面壁纸缓存（按屏幕 UUID），避免 30Hz 重取
+    private static var wallpaperCache: [String: NSImage] = [:]
+
+    private func wallpaperImage() -> NSImage? {
+        guard let win = window, let screen = win.screen ?? NSScreen.main else { return nil }
+        let uuid = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID ?? 0
+        let key = "\(uuid)-\(screen.localizedName)"
+        if let cached = Self.wallpaperCache[key] { return cached }
+        guard let url = NSWorkspace.shared.desktopImageURL(for: screen),
+              let image = NSImage(contentsOf: url) else { return nil }
+        Self.wallpaperCache[key] = image
+        return image
     }
 
     /// 全局（屏幕）坐标 → 本视图坐标

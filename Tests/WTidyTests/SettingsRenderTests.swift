@@ -27,12 +27,13 @@ struct SettingsRenderTests {
         }
         #expect(abs(tab.frame.width - bounds.width) < 1, "tab 容器宽度应贴满：\(tab.frame) vs \(bounds)")
         #expect(abs(tab.frame.height - bounds.height) < 1, "tab 容器高度应贴满")
-        #expect(tab.tabViewItems.count == 4, "布局/通用/快捷键/关于")
+        #expect(tab.tabViewItems.count == 6, "布局/行为/定位/快速布局/快捷键/关于")
+        #expect(tab.tabViewItems.map(\.label) == ["布局", "行为", "定位", "快速布局", "快捷键", "关于"])
 
         // 注意：AppKit frame 坐标原点在左下角——顶对齐的视图 maxY ≈ 容器高度。
         // NSStackView 自身 flipped，绘制自顶向下；frame 仍在容器坐标系里。
 
-        // 2) 通用页：栈应顶对齐（maxY≈页高）、靠左、尺寸合理
+        // 2) 行为页（原版 Options）：栈应顶对齐（maxY≈页高）、靠左、尺寸合理
         tab.selectTabViewItem(at: 1)
         win.contentView?.layoutSubtreeIfNeeded()
         let general = tab.tabViewItems[1].view!
@@ -42,7 +43,7 @@ struct SettingsRenderTests {
         }
         #expect(stack.frame.minX <= 40, "栈应靠左，实际 \(stack.frame)")
         #expect(abs(stack.frame.maxY - general.bounds.height) < 30, "栈应顶对齐 maxY≈\(general.bounds.height)，实际 \(stack.frame)")
-        #expect(stack.frame.width > 300, "栈宽应 > 300，实际 \(stack.frame.width)")
+        #expect(stack.frame.width > 150, "栈宽应 > 150，实际 \(stack.frame.width)")
         #expect(stack.frame.height > 200, "栈高应 > 200（塌陷则失败），实际 \(stack.frame.height)")
 
         // 3) 通用页第一个复选框应在栈顶部（转换到页面坐标后靠近页面顶端）
@@ -54,9 +55,9 @@ struct SettingsRenderTests {
         #expect(inGeneral.maxY > general.bounds.height * 0.8, "功能开关应靠页面顶部，实际 \(inGeneral)")
 
         // 4) 快捷键页应有 12 行且不塌陷（需先选中该 tab 才会布局）
-        tab.selectTabViewItem(at: 2)
+        tab.selectTabViewItem(at: 4)
         win.contentView?.layoutSubtreeIfNeeded()
-        let hotkeys = tab.tabViewItems[2].view!
+        let hotkeys = tab.tabViewItems[4].view!
         guard let hkStack = hotkeys.subviews.compactMap({ $0 as? NSStackView }).first else {
             Issue.record("快捷键页找不到布局栈")
             return

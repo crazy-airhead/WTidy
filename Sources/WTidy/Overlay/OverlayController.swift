@@ -135,7 +135,7 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
         guard let screen = activeScreen else { return }
         var model = OverlayModel()
 
-        let hoveredStrip = stripIndex(at: cursor)
+        let hoveredStrip = stripShouldShow ? stripIndex(at: cursor) : nil
         if let i = hoveredStrip, LayoutStore.layouts.indices.contains(i) {
             let layout = LayoutStore.layouts[i]
             if activeLayout?.id != layout.id {
@@ -153,7 +153,11 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
             activeZoneIndex = SnapEngine.zoneIndex(at: cursor, in: zonesGlobal)
         }
 
-        model.strip = zip(stripRectsGlobal, LayoutStore.layouts).map { (rect: $0, layout: $1) }
+        if stripShouldShow {
+            model.strip = zip(stripRectsGlobal, LayoutStore.layouts).map { (rect: $0, layout: $1) }
+        } else {
+            model.strip = []
+        }
         model.hoveredStripIndex = hoveredStrip
 
         if activeLayout != nil {
@@ -165,25 +169,60 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
         window(for: screen).overlayView.model = model
     }
 
-    /// 紧凑图标条：整条宽度不超过原版风格（~512-560pt），数量多时自适应
+    /// 图标条摆放：方向/位置/最大宽/边距均来自「定位」页设置（对齐原版 Positioning）
     private func computeStripRects(screen: NSScreen) {
         let vf = screen.visibleFrame
         let count = CGFloat(max(1, LayoutStore.layouts.count))
-        let available = vf.width - 48
-            - (count - 1) * OverlayMetrics.thumbSpacing
-            - OverlayMetrics.stripPadding * 2
-        let w = min(OverlayMetrics.iconMaxWidth,
-                    max(OverlayMetrics.iconMinWidth, available / count))
+        let margin = CGFloat(Prefs.stripMargin)
+        let maxWidth = CGFloat(Prefs.stripMaxWidth)
+
+        func fitIcons(along extent: CGFloat) -> CGFloat {
+            let available = extent - 2 * margin
+                - (count - 1) * OverlayMetrics.thumbSpacing
+            return max(OverlayMetrics.iconMinWidth, min(OverlayMetrics.iconMaxWidth, available / count))
+        }
+
+        let vertical = Prefs.stripVertical
+        let w = vertical
+            ? min(fitIcons(along: maxWidth), vf.height * 0.6)      // 纵排时用最大宽约束单图标宽
+            : fitIcons(along: min(maxWidth, vf.width))
         let h = w * OverlayMetrics.iconAspectRatio
 
-        let total = count * w + (count - 1) * OverlayMetrics.thumbSpacing + OverlayMetrics.stripPadding * 2
-        var x = vf.midX - total / 2 + OverlayMetrics.stripPadding
-        let y = vf.maxY - OverlayMetrics.stripTopGap - h
+        let totalW: CGFloat, totalH: CGFloat
+        if vertical {
+            totalW = w + 2 * OverlayMetrics.stripPadding
+            totalH = count * h + (count - 1) * OverlayMetrics.thumbSpacing + 2 * OverlayMetrics.stripPadding
+        } else {
+            totalW = count * w + (count - 1) * OverlayMetrics.thumbSpacing + 2 * OverlayMetrics.stripPadding
+            totalH = h + 2 * OverlayMetrics.stripPadding
+        }
 
-        stripRectsGlobal = (0..<Int(count)).map { _ in
-            let r = CGRect(x: x, y: y, width: w, height: h)
-            x += w + OverlayMetrics.thumbSpacing
-            return r
+        let freeW = max(0, vf.width - margin * 2 - totalW)
+        let freeH = max(0, vf.height - margin * 2 - totalH)
+        let originX = vf.minX + margin + CGFloat(Prefs.stripPosX) * freeW
+        let originYTop = vf.maxY - margin - CGFloat(Prefs.stripPosY) * freeH   // 因子 0=贴顶
+
+        stripRectsGlobal = (0..<Int(count)).map { i in
+            let offset = CGFloat(i) * (h + OverlayMetrics.thumbSpacing)
+            let x = vertical ? originX + OverlayMetrics.stripPadding
+                             : originX + OverlayMetrics.stripPadding + CGFloat(i) * (w + OverlayMetrics.thumbSpacing)
+            let y = vertical ? originYTop - OverlayMetrics.stripPadding - offset - h
+                             : originYTop - OverlayMetrics.stripPadding - h
+            return CGRect(x: x, y: y, width: w, height: h)
+        }
+    }
+
+    /// ⌥ 键当前是否按住（对齐原版「按住 ⌥ 隐藏/显示 Layout Icons」）
+    private var optionKeyHeld: Bool {
+        CGEventSource.flagsState(.combinedSessionState).contains(.maskAlternate)
+    }
+
+    /// ⌥ 模式下当前图标条是否应显示
+    private var stripShouldShow: Bool {
+        switch Prefs.optionKeyMode {
+        case 0: return !optionKeyHeld   // 按住 ⌥ 隐藏
+        case 1: return optionKeyHeld    // 按住 ⌥ 显示
+        default: return true
         }
     }
 
@@ -270,6 +309,22 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
         }
     }
 
+    /// 供快速布局调用：把前台窗口吸到指定布局的指定区域
+    @discardableResult
+    func snapFrontmost(layout: TidyLayout, zoneIndex: Int) -> Bool {
+        guard AccessibilityService.isTrusted else { return false }
+        guard let win = ax.frontmostWindow(), win.canSnap else { return false }
+        guard let screen = screenForWindow(win) else { return false }
+        let zones = SnapEngine.zoneRects(for: layout, in: screen.visibleFrame, gap: Prefs.windowGap)
+        guard zones.indices.contains(zoneIndex), !zones[zoneIndex].isNull else { return false }
+        rememberIfNeeded(win)
+        win.setNSFrame(zones[zoneIndex])
+        let desc = "\(zoneDisplayName(layout: layout, index: zoneIndex)) · \(screen.localizedName)"
+        AppLog.info("SNAP(quick) '\(win.title ?? "?")' → \(desc)")
+        onSnapApplied?(desc)
+        return true
+    }
+
     /// 快捷键动作 → (布局, 区域下标)；布局从用户列表按稳定 id 查找（被删除则动作失效）
     static func layoutAndZone(for action: SnapAction) -> (TidyLayout, Int)? {
         func l(_ id: String) -> TidyLayout? { LayoutStore.layout(id: id) }
@@ -314,8 +369,20 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
     private func applyRect(_ rect: CGRect, to win: AXWindow, layout: TidyLayout, zoneIndex: Int) {
         win.setNSFrame(rect)
         let screenName = activeScreen?.localizedName ?? "?"
-        let desc = "\(zoneDisplayName(layout: layout, index: zoneIndex)) · \(screenName)"
-        AppLog.info("SNAP '\(win.title ?? "?")' → \(desc) rect=\(Int(rect.minX)),\(Int(rect.minY)) \(Int(rect.width))x\(Int(rect.height))")
+        var desc = "\(zoneDisplayName(layout: layout, index: zoneIndex)) · \(screenName)"
+
+        // 对齐原版「窗口未能调整尺寸时显示警告」：读回实际 frame 比对
+        if let actual = win.nsFrame {
+            let deviation = max(abs(actual.minX - rect.minX), abs(actual.minY - rect.minY),
+                                abs(actual.width - rect.width), abs(actual.height - rect.height))
+            if deviation > 5 {
+                AppLog.warn("SNAP 偏差 \(Int(deviation))pt '\(win.title ?? "?")' 目标=\(rect) 实际=\(actual)")
+                if Prefs.warnOnFail {
+                    desc = "⚠️ 未能完全调整尺寸（偏差 \(Int(deviation))pt）— " + desc
+                }
+            }
+        }
+        AppLog.info("SNAP '\(win.title ?? "?")' → \(desc)")
         onSnapApplied?(desc)
     }
 

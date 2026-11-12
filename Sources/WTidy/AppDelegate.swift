@@ -16,8 +16,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         status.configure(hooks: .init(
             openSettings: { [weak self] in self?.openSettings() },
             requestPermissions: { [weak self] in self?.requestPermissions() },
-            restart: { [weak self] in self?.restart() }
+            restart: { [weak self] in self?.restart() },
+            showQuickLayout: { QuickLayoutController.shared.show() }
         ))
+        QuickLayoutController.shared.overlay = overlay
+        status.setVisible(Prefs.showStatusIcon)
 
         if let last = Prefs.lastSnap {
             status.setLastSnap(last)
@@ -35,6 +38,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         HotkeyManager.shared.actionHandler = { [weak self] action in
             self?.overlay.snapFrontmost(action)
         }
+        HotkeyManager.shared.quickLayoutHandler = {
+            QuickLayoutController.shared.show()
+        }
         HotkeyManager.shared.refresh()
 
         registerWorkspaceNotifications()
@@ -44,6 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             forName: .prefsChanged, object: nil, queue: .main
         ) { [weak self] _ in
             self?.status.refreshToggles()
+            self?.status.setVisible(Prefs.showStatusIcon)
             HotkeyManager.shared.refresh()
         }
 
