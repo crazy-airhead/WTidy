@@ -105,9 +105,9 @@ final class OverlayView: NSView {
 }
 
 enum OverlayMetrics {
-    /// 布局图标尺寸：目标为整条不超过原版的 ~512pt（窄屏自适应缩放）
+    /// 布局图标尺寸：对齐原版拖拽条的图标观感（~64-110pt 宽）
     static let iconMaxWidth: CGFloat = 110
-    static let iconMinWidth: CGFloat = 56
+    static let iconMinWidth: CGFloat = 64
     static let iconAspectRatio: CGFloat = 0.58   // 高/宽
     static let thumbSpacing: CGFloat = 10
     static let stripPadding: CGFloat = 12
@@ -116,11 +116,18 @@ enum OverlayMetrics {
 }
 
 /// 单个布局图标的绘制（overlay 条 / 定位预览 / 快速布局面板共用，保证视觉一致）。
-/// 视觉对齐原版 Layout Icons：蓝色壁纸渐变底 + 网格线 + 深色区域块。
+/// 两种风格（对齐原版的两处用法）：
+/// - .dark：拖拽图标条与快速布局面板——深藏青底 + 白网格 + 白色区域块
+/// - .light：设置页缩略图与屏幕位置预览——银蓝壁纸底 + 白网格 + 深色区域块（亮蓝描边）
 enum LayoutIconRenderer {
+    enum Style {
+        case dark, light
+    }
+
     /// 在当前绘图上下文中绘制布局图标。rect 为当前视图坐标系矩形。
     /// flipped：所在视图是否翻转坐标（y 向下）——区域块的 y 映射随之变化。
     static func draw(layout: TidyLayout, in rect: CGRect, flipped: Bool,
+                     style: Style = .dark,
                      hovered: Bool = false, showName: Bool = false) {
         NSGraphicsContext.saveGraphicsState()
         let clip = NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8)
@@ -137,22 +144,28 @@ enum LayoutIconRenderer {
                           height: nr.height * rect.height)
         }
 
-        // 1) 壁纸渐变底（模拟原版默认蓝色壁纸）
+        // 1) 底色渐变（视觉顶→底）
         let space = NSColorSpace.deviceRGB
-        let grad = NSGradient(colors: [NSColor(red: 0.62, green: 0.78, blue: 0.94, alpha: 1),
-                                       NSColor(red: 0.36, green: 0.55, blue: 0.82, alpha: 1),
-                                       NSColor(red: 0.22, green: 0.38, blue: 0.68, alpha: 1)],
-                              atLocations: [0, 0.55, 1],
-                              colorSpace: space)
-        // 渐变方向：顶亮底深。翻转视图 angle 90=向上绘制……统一用两点式保证方向
+        let colors: [NSColor]
+        switch style {
+        case .dark:
+            colors = [NSColor(red: 0.17, green: 0.21, blue: 0.30, alpha: 1),
+                      NSColor(red: 0.11, green: 0.14, blue: 0.21, alpha: 1)]
+        case .light:
+            colors = [NSColor(red: 0.80, green: 0.87, blue: 0.95, alpha: 1),
+                      NSColor(red: 0.52, green: 0.67, blue: 0.86, alpha: 1),
+                      NSColor(red: 0.34, green: 0.50, blue: 0.76, alpha: 1)]
+        }
+        let locations: [CGFloat] = style == .dark ? [0, 1] : [0, 0.55, 1]
+        let grad = NSGradient(colors: colors, atLocations: locations, colorSpace: space)
         grad?.draw(from: NSPoint(x: rect.minX, y: rect.maxY),   // 顶（两种坐标系都是视觉顶）
                    to: NSPoint(x: rect.minX, y: rect.minY),
                    options: [])
 
-        // 2) 网格线（cols×rows，细白线）
+        // 2) 网格线（cols×rows，细线）
         let cw = rect.width / CGFloat(layout.cols)
         let ch = rect.height / CGFloat(layout.rows)
-        NSColor.white.withAlphaComponent(0.22).setStroke()
+        NSColor.white.withAlphaComponent(style == .dark ? 0.28 : 0.40).setStroke()
         let grid = NSBezierPath()
         grid.lineWidth = 0.5
         for c in 1..<layout.cols {
@@ -167,14 +180,20 @@ enum LayoutIconRenderer {
         }
         grid.stroke()
 
-        // 3) 区域块：深色藏青圆角块 + 淡蓝描边（对齐原版区域单元的凹陷观感）
+        // 3) 区域块
         for nr in layout.normalizedRects {
             let cellPath = NSBezierPath(roundedRect: cellRect(nr).insetBy(dx: 1.5, dy: 1.5),
                                         xRadius: 4, yRadius: 4)
-            NSColor(red: 0.07, green: 0.11, blue: 0.18, alpha: 0.92).setFill()
-            cellPath.fill()
-            NSColor(red: 0.62, green: 0.75, blue: 0.9, alpha: 0.55).setStroke()
+            switch style {
+            case .dark:
+                NSColor.white.withAlphaComponent(0.88).setFill()
+                NSColor.white.withAlphaComponent(0.35).setStroke()
+            case .light:
+                NSColor(red: 0.09, green: 0.14, blue: 0.23, alpha: 0.94).setFill()
+                NSColor(red: 0.38, green: 0.68, blue: 0.95, alpha: 0.85).setStroke()
+            }
             cellPath.lineWidth = 1
+            cellPath.fill()
             cellPath.stroke()
         }
 
@@ -191,7 +210,7 @@ enum LayoutIconRenderer {
             NSColor.white.withAlphaComponent(0.95).setStroke()
             border.lineWidth = 2
         } else {
-            NSColor.white.withAlphaComponent(0.7).setStroke()
+            NSColor.white.withAlphaComponent(style == .dark ? 0.7 : 0.55).setStroke()
             border.lineWidth = 1
         }
         border.stroke()

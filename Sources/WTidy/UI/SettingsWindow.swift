@@ -151,13 +151,14 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         return item
     }
 
-    /// 布局缩略图：走共用渲染器（原版风壁纸网格）
+    /// 布局缩略图：走共用渲染器（浅色壁纸网格风，对齐原版 Layouts 列表）
     static func thumbnail(for layout: TidyLayout, size: NSSize = NSSize(width: 104, height: 60)) -> NSImage {
         let img = NSImage(size: size)
         img.lockFocus()
         LayoutIconRenderer.draw(layout: layout,
                                 in: NSRect(origin: .zero, size: size),
-                                flipped: false)   // NSImage 上下文原点左下
+                                flipped: false,   // NSImage 上下文原点左下
+                                style: .light)
         img.unlockFocus()
         return img
     }
@@ -339,7 +340,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
 
     private let orientHoriRadio = NSButton(radioButtonWithTitle: "横向排列图标", target: nil, action: nil)
     private let orientVertRadio = NSButton(radioButtonWithTitle: "纵向排列图标", target: nil, action: nil)
-    private let posPreview = ScreenPositionPreviewView(frame: NSRect(x: 0, y: 0, width: 360, height: 180))
+    private let posPreview = ScreenPositionPreviewView(frame: NSRect(x: 0, y: 0, width: 660, height: 340))
     private let posHSlider = NSSlider(value: 0.5, minValue: 0, maxValue: 1,
                                       target: nil, action: #selector(posHChanged))
     private let posVSlider = NSSlider(value: 0, minValue: 0, maxValue: 1,
@@ -367,21 +368,21 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         stack.addArrangedSubview(orientRow)
 
         stack.addArrangedSubview(sectionTitle("屏幕位置"))
-        // 原版式布局：横向滑杆在预览下方、纵向滑杆在预览右侧
+        // 原版式布局：大预览 + 横向滑杆在下方、纵向滑杆在右侧
         posHSlider.target = self
         posHSlider.action = #selector(posHChanged)
         posHSlider.isContinuous = true
-        posHSlider.widthAnchor.constraint(equalToConstant: 340).isActive = true
+        posHSlider.widthAnchor.constraint(equalToConstant: 660).isActive = true
         posVSlider.target = self
         posVSlider.action = #selector(posVChanged)
         posVSlider.isContinuous = true
         posVSlider.isVertical = true
         posVSlider.widthAnchor.constraint(equalToConstant: 24).isActive = true
-        posVSlider.heightAnchor.constraint(equalToConstant: 180).isActive = true
+        posVSlider.heightAnchor.constraint(equalToConstant: 340).isActive = true
 
         posPreview.translatesAutoresizingMaskIntoConstraints = false
-        posPreview.widthAnchor.constraint(equalToConstant: 340).isActive = true
-        posPreview.heightAnchor.constraint(equalToConstant: 180).isActive = true
+        posPreview.widthAnchor.constraint(equalToConstant: 660).isActive = true
+        posPreview.heightAnchor.constraint(equalToConstant: 340).isActive = true
 
         let previewColumn = NSStackView(views: [posPreview, posHSlider])
         previewColumn.orientation = .vertical
@@ -421,7 +422,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     private let qlNearCursorCheck = NSButton(checkboxWithTitle: "显示在鼠标光标附近", target: nil, action: nil)
     private let qlPosHSlider = NSSlider(value: 0.5, minValue: 0, maxValue: 1, target: nil, action: nil)
     private let qlPosVSlider = NSSlider(value: 0.5, minValue: 0, maxValue: 1, target: nil, action: nil)
-    private let qlPreview = ScreenPositionPreviewView(frame: NSRect(x: 0, y: 0, width: 340, height: 150))
+    private let qlPreview = ScreenPositionPreviewView(frame: NSRect(x: 0, y: 0, width: 660, height: 300))
     private let qlWidthField = NSTextField(string: "512")
     private let qlHeightField = NSTextField(string: "288")
 
@@ -448,21 +449,21 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         qlNearCursorCheck.target = self
         qlNearCursorCheck.action = #selector(qlNearCursorChanged)
         stack.addArrangedSubview(qlNearCursorCheck)
-        // 原版式：横滑杆在下、纵滑杆在右 + 面板块预览
+        // 原版式：横滑杆在下、纵滑杆在右 + 单图标预览
         qlPosHSlider.target = self
         qlPosHSlider.action = #selector(qlPosHChanged)
         qlPosHSlider.isContinuous = true
-        qlPosHSlider.widthAnchor.constraint(equalToConstant: 340).isActive = true
+        qlPosHSlider.widthAnchor.constraint(equalToConstant: 660).isActive = true
         qlPosVSlider.target = self
         qlPosVSlider.action = #selector(qlPosVChanged)
         qlPosVSlider.isContinuous = true
         qlPosVSlider.isVertical = true
         qlPosVSlider.widthAnchor.constraint(equalToConstant: 24).isActive = true
-        qlPosVSlider.heightAnchor.constraint(equalToConstant: 150).isActive = true
+        qlPosVSlider.heightAnchor.constraint(equalToConstant: 300).isActive = true
 
         qlPreview.translatesAutoresizingMaskIntoConstraints = false
-        qlPreview.widthAnchor.constraint(equalToConstant: 340).isActive = true
-        qlPreview.heightAnchor.constraint(equalToConstant: 150).isActive = true
+        qlPreview.widthAnchor.constraint(equalToConstant: 660).isActive = true
+        qlPreview.heightAnchor.constraint(equalToConstant: 300).isActive = true
         let qlColumn = NSStackView(views: [qlPreview, qlPosHSlider])
         qlColumn.orientation = .vertical
         qlColumn.spacing = 8
@@ -786,16 +787,22 @@ final class ScreenPositionPreviewView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         // 迷你屏幕（默认坐标，原点左下，与 StripGeometry 一致）
+        // 底色 = 浅蓝壁纸渐变（对齐原版 Screen position 的迷你屏观感）
         let screen = bounds.insetBy(dx: 10, dy: 10)
         let path = NSBezierPath(roundedRect: screen, xRadius: 10, yRadius: 10)
-        NSColor.controlAccentColor.withAlphaComponent(0.16).setFill()
-        path.fill()
+        NSGraphicsContext.saveGraphicsState()
+        path.addClip()
+        let grad = NSGradient(colors: [NSColor(red: 0.80, green: 0.87, blue: 0.95, alpha: 1),
+                                       NSColor(red: 0.34, green: 0.50, blue: 0.76, alpha: 1)])
+        grad?.draw(from: NSPoint(x: screen.midX, y: screen.maxY),
+                   to: NSPoint(x: screen.midX, y: screen.minY), options: [])
+        NSGraphicsContext.restoreGraphicsState()
         NSColor.separatorColor.setStroke()
         path.lineWidth = 1
         path.stroke()
 
-        // 虚拟屏幕宽 1600pt，按比例缩放绘制（让 512pt 最大宽等约束呈现真实比例）
-        let virtualWidth: CGFloat = 1600
+        // 虚拟屏幕宽 900pt：让图标在预览里足够大（对齐原版预览中图标的大小编感）
+        let virtualWidth: CGFloat = 900
         let k = screen.width / virtualWidth
         let virtualVF = CGRect(x: 0, y: 0, width: virtualWidth, height: screen.height / k)
 
@@ -808,7 +815,7 @@ final class ScreenPositionPreviewView: NSView {
                                       y: screen.minY + r.minY * k,
                                       width: r.width * k,
                                       height: r.height * k)
-                LayoutIconRenderer.draw(layout: layouts[i], in: viewRect, flipped: false)
+                LayoutIconRenderer.draw(layout: layouts[i], in: viewRect, flipped: false, style: .light)
             }
 
         case .quickLayout:
@@ -820,7 +827,7 @@ final class ScreenPositionPreviewView: NSView {
             let iconRect = NSRect(x: x, y: y, width: w, height: h)
             let layout = LayoutStore.displayLayouts(for: nil).first
                 ?? TidyLayout.builtins[0]
-            LayoutIconRenderer.draw(layout: layout, in: iconRect, flipped: false)
+            LayoutIconRenderer.draw(layout: layout, in: iconRect, flipped: false, style: .light)
         }
     }
 }
