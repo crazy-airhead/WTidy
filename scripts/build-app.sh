@@ -39,7 +39,8 @@ if [[ "${1:-}" == "--install" ]]; then
     sleep 1
     rm -rf "/Applications/WTidy.app"
     /usr/bin/ditto "$APP" "/Applications/WTidy.app"
+    rm -rf "$APP"   # 只保留 /Applications 一份，避免误开旧副本
     open "/Applications/WTidy.app"
     echo "✓ 已安装并启动 /Applications/WTidy.app"
-    echo "  首次使用请在 系统设置 → 隐私与安全性 → 辅助功能 中授权 WTidy"
+    echo "  每次重新构建后需在 系统设置 → 隐私与安全性 → 辅助功能 重新授权"
 fi
