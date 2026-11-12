@@ -59,19 +59,23 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
 
         activeScreen = screen
         activeScreenNumber = screenNumber(of: screen)
-        activeLayout = nil
+        // Window Tidy 行为：拖动瞬间整屏展开上次使用的布局，分区直接可投放
+        activeLayout = SnapLayout.strip.first { $0.id == Prefs.lastLayoutID } ?? SnapLayout.strip[0]
+        zonesGlobal = SnapEngine.zoneRects(for: activeLayout!, in: screen.visibleFrame, gap: Prefs.windowGap)
         presentOverlay(on: screen, cursor: cursor)
     }
 
     func dragTick(cursor: CGPoint) {
-        // 拖到另一块屏：把 overlay 迁过去
+        // 拖到另一块屏：把 overlay 迁过去（布局保持，分区换算到新屏）
         if let screen = screenForPoint(cursor), screenNumber(of: screen) != activeScreenNumber {
             if let old = activeScreen {
                 window(for: old).dismissOverlay()
             }
             activeScreen = screen
             activeScreenNumber = screenNumber(of: screen)
-            activeLayout = nil
+            if let layout = activeLayout {
+                zonesGlobal = SnapEngine.zoneRects(for: layout, in: screen.visibleFrame, gap: Prefs.windowGap)
+            }
             presentOverlay(on: screen, cursor: cursor)
             return
         }
@@ -90,6 +94,7 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
         }
         let rect = zonesGlobal[idx]
         let name = zoneDisplayName(layout: layout, index: idx)
+        Prefs.lastLayoutID = layout.id
         applyRect(rect, to: win, name: name)
     }
 
@@ -109,9 +114,9 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
         guard let screen = activeScreen else { return }
         var model = OverlayModel()
 
-        // 命中缩略图？
+        // 命中缩略图？（外扩 8pt，更容易瞄准）
         var hoveredStrip: Int? = nil
-        for (i, r) in stripRectsGlobal.enumerated() where r.contains(cursor) {
+        for (i, r) in stripRectsGlobal.enumerated() where r.insetBy(dx: -8, dy: -8).contains(cursor) {
             hoveredStrip = i
         }
 
@@ -126,7 +131,8 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
         }
 
         model.strip = zip(SnapLayout.strip, stripRectsGlobal).map { layout, rect in
-            let inner = rect.insetBy(dx: OverlayMetrics.thumbInnerInset, dy: OverlayMetrics.thumbInnerInset)
+            let inset = currentThumbSize.height * 0.12
+            let inner = rect.insetBy(dx: inset, dy: inset)
             let mini = SnapEngine.zoneRects(for: layout, in: inner, gap: 0)
             return (rect: rect, miniZones: mini)
         }
@@ -141,18 +147,33 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
         window(for: screen).overlayView.model = model
     }
 
+    /// 当前屏实际使用的缩略图尺寸（窄屏自适应缩小）
+    private var currentThumbSize = OverlayMetrics.thumbSize
+
     private func computeStripRects(screen: NSScreen) {
         let vf = screen.visibleFrame
         let count = CGFloat(SnapLayout.strip.count)
-        let total = count * OverlayMetrics.thumbSize.width
+        var thumb = OverlayMetrics.thumbSize
+        let available = vf.width - 48
+        let natural = count * thumb.width
+            + (count - 1) * OverlayMetrics.thumbSpacing
+            + OverlayMetrics.stripPadding * 2
+        if natural > available {
+            let scale = max(0.5, available / natural)
+            thumb.width = (thumb.width * scale).rounded()
+            thumb.height = (thumb.height * scale).rounded()
+        }
+        currentThumbSize = thumb
+
+        let total = count * thumb.width
             + (count - 1) * OverlayMetrics.thumbSpacing
             + OverlayMetrics.stripPadding * 2
         var x = vf.midX - total / 2 + OverlayMetrics.stripPadding
-        let y = vf.maxY - OverlayMetrics.stripTopGap - OverlayMetrics.thumbSize.height
+        let y = vf.maxY - OverlayMetrics.stripTopGap - thumb.height
 
         stripRectsGlobal = SnapLayout.strip.map { _ in
-            let r = CGRect(x: x, y: y, width: OverlayMetrics.thumbSize.width, height: OverlayMetrics.thumbSize.height)
-            x += OverlayMetrics.thumbSize.width + OverlayMetrics.thumbSpacing
+            let r = CGRect(x: x, y: y, width: thumb.width, height: thumb.height)
+            x += thumb.width + OverlayMetrics.thumbSpacing
             return r
         }
     }

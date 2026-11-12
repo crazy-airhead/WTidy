@@ -12,7 +12,8 @@ struct OverlayModel {
     var hoveredZoneIndex: Int? = nil
 }
 
-/// 翻转坐标的绘制视图：画布局缩略图条 + 分屏分区高亮。
+/// 翻转坐标的绘制视图：整屏分区高亮 + 顶部布局条。
+/// 交互模仿原版 Window Tidy：拖动瞬间整屏展开分区，拖到哪个分区哪个高亮，松手吸附。
 final class OverlayView: NSView {
     var model = OverlayModel() {
         didSet { needsDisplay = true }
@@ -21,27 +22,28 @@ final class OverlayView: NSView {
     override var isFlipped: Bool { true }
 
     override func draw(_ dirtyRect: NSRect) {
-        // 展开态：暗纱 + 分区
+        // 展开态：整屏暗纱 + 分区
         if let veil = model.veilRect {
             let v = convert(veil)
-            NSColor.black.withAlphaComponent(0.16).setFill()
+            NSColor.black.withAlphaComponent(0.22).setFill()
             v.fill()
 
             for (i, zone) in model.zones.enumerated() {
                 let z = convert(zone)
                 let hovered = (i == model.hoveredZoneIndex)
-                let path = NSBezierPath(roundedRect: z.insetBy(dx: 2, dy: 2), xRadius: 8, yRadius: 8)
+                let path = NSBezierPath(roundedRect: z.insetBy(dx: 3, dy: 3), xRadius: 10, yRadius: 10)
                 if hovered {
-                    NSColor.controlAccentColor.withAlphaComponent(0.38).setFill()
+                    NSColor.controlAccentColor.withAlphaComponent(0.34).setFill()
                     path.fill()
                     NSColor.white.withAlphaComponent(0.95).setStroke()
-                    path.lineWidth = 2
-                    path.stroke()
+                    path.lineWidth = 3
                 } else {
-                    NSColor.white.withAlphaComponent(0.45).setStroke()
-                    path.lineWidth = 1
-                    path.stroke()
+                    NSColor.white.withAlphaComponent(0.08).setFill()
+                    path.fill()
+                    NSColor.white.withAlphaComponent(0.7).setStroke()
+                    path.lineWidth = 2
                 }
+                path.stroke()
             }
         }
 
@@ -55,32 +57,32 @@ final class OverlayView: NSView {
         let card = union.insetBy(dx: -OverlayMetrics.stripPadding, dy: -OverlayMetrics.stripPadding)
 
         // 底卡
-        let cardPath = NSBezierPath(roundedRect: card, xRadius: 14, yRadius: 14)
-        NSColor.black.withAlphaComponent(0.55).setFill()
+        let cardPath = NSBezierPath(roundedRect: card, xRadius: 16, yRadius: 16)
+        NSColor.black.withAlphaComponent(0.58).setFill()
         cardPath.fill()
 
         for (i, item) in model.strip.enumerated() {
             let r = rects[i]
             let hovered = (i == model.hoveredStripIndex)
-            let thumb = NSBezierPath(roundedRect: r, xRadius: 7, yRadius: 7)
+            let thumb = NSBezierPath(roundedRect: r, xRadius: 10, yRadius: 10)
             if hovered {
-                NSColor.controlAccentColor.withAlphaComponent(0.75).setFill()
+                NSColor.controlAccentColor.withAlphaComponent(0.8).setFill()
             } else {
-                NSColor.white.withAlphaComponent(0.16).setFill()
+                NSColor.white.withAlphaComponent(0.18).setFill()
             }
             thumb.fill()
-            NSColor.white.withAlphaComponent(0.75).setStroke()
-            thumb.lineWidth = 1
+            NSColor.white.withAlphaComponent(0.8).setStroke()
+            thumb.lineWidth = 1.5
             thumb.stroke()
 
             // 迷你分区线
             for mini in item.miniZones {
                 let m = convert(mini)
-                let miniPath = NSBezierPath(roundedRect: m.insetBy(dx: 1.5, dy: 1.5), xRadius: 4, yRadius: 4)
+                let miniPath = NSBezierPath(roundedRect: m.insetBy(dx: 2, dy: 2), xRadius: 5, yRadius: 5)
                 if hovered {
-                    NSColor.white.withAlphaComponent(0.9).setFill()
+                    NSColor.white.withAlphaComponent(0.92).setFill()
                 } else {
-                    NSColor.white.withAlphaComponent(0.45).setFill()
+                    NSColor.white.withAlphaComponent(0.5).setFill()
                 }
                 miniPath.fill()
             }
@@ -96,9 +98,9 @@ final class OverlayView: NSView {
 }
 
 enum OverlayMetrics {
-    static let thumbSize = CGSize(width: 68, height: 44)
-    static let thumbSpacing: CGFloat = 10
-    static let stripPadding: CGFloat = 12
-    static let stripTopGap: CGFloat = 10
-    static let thumbInnerInset: CGFloat = 6
+    /// 布局缩略图尺寸（约为旧版的两倍，易瞄准；屏幕过窄时自适应缩小）
+    static let thumbSize = CGSize(width: 124, height: 78)
+    static let thumbSpacing: CGFloat = 14
+    static let stripPadding: CGFloat = 14
+    static let stripTopGap: CGFloat = 14
 }

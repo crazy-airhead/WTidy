@@ -9,6 +9,7 @@ enum Prefs {
         static let hotkeysEnabled = "hotkeysEnabled"
         static let windowGap = "windowGap"
         static let lastSnap = "lastSnapDescription"
+        static let lastLayoutID = "lastLayoutID"
         static let hotkeyEnabledPrefix = "hotkey.enabled."
     }
 
@@ -39,6 +40,12 @@ enum Prefs {
     static var lastSnap: String? {
         get { defaults.string(forKey: Keys.lastSnap) }
         set { set(newValue, forKey: Keys.lastSnap) }
+    }
+
+    /// 拖拽开始时默认展开的布局（记忆上次用过的，默认左右半屏）
+    static var lastLayoutID: String {
+        get { defaults.string(forKey: Keys.lastLayoutID) ?? "halves" }
+        set { set(newValue, forKey: Keys.lastLayoutID) }
     }
 
     static func hotkeyEnabled(_ id: String) -> Bool {
