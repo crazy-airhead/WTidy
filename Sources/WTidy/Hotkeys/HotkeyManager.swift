@@ -97,9 +97,14 @@ final class HotkeyManager {
 
     private var hotKeyRefs: [SnapAction: EventHotKeyRef] = [:]
     private var qlHotKeyRef: EventHotKeyRef?
+    private var layoutHotKeyRefs: [EventHotKeyRef] = []
+    /// 每布局激活快捷键：热键 id → 布局 id（原版每布局 Activation Shortcut）
+    private var layoutShortcutMap: [UInt32: String] = [:]
+    var layoutShortcutHandler: ((String) -> Void)?
     private var handlerInstalled = false
     private let signature: OSType = 0x57546479 // 'WTdy'
     private static let qlHotKeyID: UInt32 = 999
+    private static let layoutHotKeyBase: UInt32 = 3000
 
     static let shared = HotkeyManager()
 
@@ -137,7 +142,23 @@ final class HotkeyManager {
         } else {
             AppLog.warn("注册快速布局热键失败 err=\(qlErr)")
         }
-        AppLog.info("快捷键已注册 \(hotKeyRefs.count)/\(SnapAction.allCases.count) + 快速布局")
+
+        // 每布局激活快捷键（原版 Activation Shortcut）：应用到前台窗口
+        layoutShortcutMap.removeAll()
+        var seq = Self.layoutHotKeyBase
+        for layout in LayoutStore.layouts {
+            guard let kc = layout.activationKeyCode, kc > 0,
+                  let mods = layout.activationModifiers else { continue }
+            let hkID = EventHotKeyID(signature: signature, id: seq)
+            var ref: EventHotKeyRef?
+            if RegisterEventHotKey(UInt32(kc), UInt32(mods), hkID,
+                                   GetApplicationEventTarget(), 0, &ref) == noErr, let ref = ref {
+                layoutHotKeyRefs.append(ref)
+                layoutShortcutMap[seq] = layout.id
+            }
+            seq += 1
+        }
+        AppLog.info("快捷键已注册 \(hotKeyRefs.count)/\(SnapAction.allCases.count) + 快速布局 + 布局快捷键 \(layoutShortcutMap.count)")
     }
 
     func unregisterAll() {
@@ -149,6 +170,11 @@ final class HotkeyManager {
             UnregisterEventHotKey(ref)
             qlHotKeyRef = nil
         }
+        for ref in layoutHotKeyRefs {
+            UnregisterEventHotKey(ref)
+        }
+        layoutHotKeyRefs.removeAll()
+        layoutShortcutMap.removeAll()
     }
 
     private func installHandlerIfNeeded() {
@@ -170,6 +196,13 @@ final class HotkeyManager {
             if hkID.id == HotkeyManager.qlHotKeyID {
                 DispatchQueue.main.async {
                     manager.quickLayoutHandler?()
+                }
+                return noErr
+            }
+            if hkID.id >= HotkeyManager.layoutHotKeyBase,
+               let layoutID = manager.layoutShortcutMap[hkID.id] {
+                DispatchQueue.main.async {
+                    manager.layoutShortcutHandler?(layoutID)
                 }
                 return noErr
             }

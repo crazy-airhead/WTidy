@@ -51,6 +51,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         HotkeyManager.shared.quickLayoutHandler = {
             QuickLayoutController.shared.show()
         }
+        HotkeyManager.shared.layoutShortcutHandler = { [weak self] layoutID in
+            _ = self?.overlay.applyLayoutByID(layoutID)
+        }
         HotkeyManager.shared.refresh()
 
         registerWorkspaceNotifications()

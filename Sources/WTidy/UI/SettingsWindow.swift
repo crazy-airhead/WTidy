@@ -888,20 +888,173 @@ final class HotkeyRecorderButton: NSButton {
     }
 }
 
-// MARK: - 布局编辑器
-//
-// 对齐原版 Layouts 的编辑模型：名称 + 网格（cols×rows）+ 若干区域
-// （1-based 单元坐标 (x1,y1)-(x2,y2)，y1 为顶行），实时预览缩略图。
+// MARK: - 布局编辑器（对齐原版 Edit Layout：网格画布上拖画区域，不填数字）
+
+/// 网格画布：在预览网格上拖拽画出区域 / 拖动移动 / 点选删除
+final class LayoutGridCanvasView: NSView {
+    private(set) var cols: Int
+    private(set) var rows: Int
+    private(set) var regions: [TidyLayout.Region]
+    private(set) var selectedIndex: Int? = nil
+
+    var onChanged: (() -> Void)?
+
+    private enum DragMode {
+        case none
+        case paint(anchorX: Int, anchorY: Int)
+        case move(index: Int, lastX: Int, lastY: Int)
+    }
+    private var mode: DragMode = .none
+
+    init(cols: Int, rows: Int, regions: [TidyLayout.Region]) {
+        self.cols = cols
+        self.rows = rows
+        self.regions = regions
+        super.init(frame: NSRect(x: 0, y: 0, width: 470, height: 300))
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) 未实现") }
+
+    override var isFlipped: Bool { true }   // 顶行在上，与网格 (1,1) 直觉一致
+
+    // MARK: 绘制（浅色壁纸 + 网格 + 深色区域，选中亮蓝描边）
+
+    override func draw(_ dirtyRect: NSRect) {
+        let grad = NSGradient(colors: [NSColor(red: 0.80, green: 0.87, blue: 0.95, alpha: 1),
+                                       NSColor(red: 0.34, green: 0.50, blue: 0.76, alpha: 1)])
+        grad?.draw(from: NSPoint(x: bounds.midX, y: bounds.maxY),
+                   to: NSPoint(x: bounds.midX, y: bounds.minY), options: [])
+
+        let cw = bounds.width / CGFloat(cols)
+        let ch = bounds.height / CGFloat(rows)
+        NSColor.white.withAlphaComponent(0.35).setStroke()
+        let grid = NSBezierPath()
+        grid.lineWidth = 0.5
+        for c in 1..<cols {
+            let x = bounds.minX + cw * CGFloat(c)
+            grid.move(to: CGPoint(x: x, y: bounds.minY))
+            grid.line(to: CGPoint(x: x, y: bounds.maxY))
+        }
+        for r in 1..<rows {
+            let y = bounds.minY + ch * CGFloat(r)
+            grid.move(to: CGPoint(x: bounds.minX, y: y))
+            grid.line(to: CGPoint(x: bounds.maxX, y: y))
+        }
+        grid.stroke()
+
+        for (i, region) in regions.enumerated() {
+            let w = bounds.width / CGFloat(cols)
+            let h = bounds.height / CGFloat(rows)
+            let r = NSRect(x: bounds.minX + CGFloat(region.x1 - 1) * w,
+                           y: bounds.minY + CGFloat(region.y1 - 1) * h,
+                           width: CGFloat(region.x2 - region.x1 + 1) * w,
+                           height: CGFloat(region.y2 - region.y1 + 1) * h)
+            let path = NSBezierPath(roundedRect: r.insetBy(dx: 1.5, dy: 1.5), xRadius: 4, yRadius: 4)
+            NSColor(red: 0.09, green: 0.14, blue: 0.23, alpha: 0.92).setFill()
+            path.fill()
+            if i == selectedIndex {
+                NSColor.white.withAlphaComponent(0.95).setStroke()
+                path.lineWidth = 2.5
+            } else {
+                NSColor(red: 0.38, green: 0.68, blue: 0.95, alpha: 0.85).setStroke()
+                path.lineWidth = 1
+            }
+            path.stroke()
+        }
+    }
+
+    // MARK: 坐标换算
+
+    private func cellAt(_ point: NSPoint) -> (x: Int, y: Int) {
+        let x = min(cols, max(1, Int(point.x / bounds.width * CGFloat(cols)) + 1))
+        let y = min(rows, max(1, Int(point.y / bounds.height * CGFloat(rows)) + 1))
+        return (x, y)
+    }
+
+    // MARK: 交互：空白处拖画新区域；点住已画区域拖动移动
+
+    override func mouseDown(with event: NSEvent) {
+        let cell = cellAt(convert(event.locationInWindow, from: nil))
+        if let idx = regions.firstIndex(where: { $0.contains(cellX: cell.x, cellY: cell.y) }) {
+            selectedIndex = idx
+            mode = .move(index: idx, lastX: cell.x, lastY: cell.y)
+        } else {
+            regions.append(TidyLayout.Region(cell.x, cell.y, cell.x, cell.y))
+            selectedIndex = regions.count - 1
+            mode = .paint(anchorX: cell.x, anchorY: cell.y)
+        }
+        needsDisplay = true
+        onChanged?()
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        let cell = cellAt(convert(event.locationInWindow, from: nil))
+        switch mode {
+        case .none:
+            return
+        case .paint(let ax, let ay):
+            guard regions.indices.contains(selectedIndex ?? -1) else { return }
+            let x1 = min(ax, cell.x), x2 = max(ax, cell.x)
+            let y1 = min(ay, cell.y), y2 = max(ay, cell.y)
+            regions[selectedIndex!] = TidyLayout.Region(x1, y1, x2, y2)
+        case .move(let idx, let lastX, let lastY):
+            guard regions.indices.contains(idx) else { return }
+            let dx = cell.x - lastX
+            let dy = cell.y - lastY
+            guard dx != 0 || dy != 0 else { return }
+            var r = regions[idx]
+            r.x1 = min(max(r.x1 + dx, 1), cols)
+            r.x2 = min(max(r.x2 + dx, 1), cols)
+            r.y1 = min(max(r.y1 + dy, 1), rows)
+            r.y2 = min(max(r.y2 + dy, 1), rows)
+            regions[idx] = r
+            mode = .move(index: idx, lastX: cell.x, lastY: cell.y)
+        }
+        needsDisplay = true
+        onChanged?()
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        mode = .none
+    }
+
+    // MARK: 网格变化与删除
+
+    /// 网格字段变化：夹紧已有区域到新网格
+    func setGrid(cols newCols: Int, rows newRows: Int) {
+        cols = newCols
+        rows = newRows
+        regions = regions.enumerated().map { i, r in
+            var x1 = min(r.x1, cols), x2 = min(r.x2, cols)
+            var y1 = min(r.y1, rows), y2 = min(r.y2, rows)
+            if x1 > x2 { swap(&x1, &x2) }
+            if y1 > y2 { swap(&y1, &y2) }
+            if x1 > x2 || y1 > y2 { selectedIndex = nil }
+            _ = i
+            return TidyLayout.Region(max(x1, 1), max(y1, 1), max(x2, 1), max(y2, 1))
+        }
+        needsDisplay = true
+    }
+
+    func deleteSelected() {
+        guard let idx = selectedIndex, regions.indices.contains(idx) else { return }
+        regions.remove(at: idx)
+        selectedIndex = nil
+        needsDisplay = true
+        onChanged?()
+    }
+}
 
 final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFieldDelegate {
     private let window: NSWindow
     private let nameField: NSTextField
     private let colsField: NSTextField
     private let rowsField: NSTextField
-    private let scopePopUp = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 200, height: 26), pullsDown: false)
-    private let regionsStack: NSStackView
+    private let scopePopUp = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 220, height: 26), pullsDown: false)
+    private let shortcutRecorder = HotkeyRecorderButton(title: "未设置（点击录制）")
+    private let canvas: LayoutGridCanvasView
     private let previewView: NSImageView
-    private var regionFields: [(x1: NSTextField, y1: NSTextField, x2: NSTextField, y2: NSTextField)] = []
+    private let deleteRegionButton = NSButton(title: "删除所选区域", target: nil, action: nil)
     private var working: TidyLayout
     private let isNew: Bool
     private let onCommit: (TidyLayout) -> Void
@@ -926,17 +1079,14 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
         self.isNew = isNew
         self.onCommit = onCommit
 
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 470, height: 480),
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 740),
                           styleMask: [.titled, .closable],
                           backing: .buffered, defer: false)
         nameField = NSTextField(string: layout.name)
         colsField = NSTextField(string: String(layout.cols))
         rowsField = NSTextField(string: String(layout.rows))
-        regionsStack = NSStackView()
-        regionsStack.orientation = .vertical
-        regionsStack.alignment = .leading
-        regionsStack.spacing = 4
-        previewView = NSImageView(image: SettingsWindowController.thumbnail(for: layout, size: NSSize(width: 180, height: 100)))
+        canvas = LayoutGridCanvasView(cols: layout.cols, rows: layout.rows, regions: layout.regions)
+        previewView = NSImageView(image: SettingsWindowController.thumbnail(for: layout, size: NSSize(width: 200, height: 112)))
 
         super.init()
 
@@ -947,15 +1097,16 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
         window.delegate = self
 
         buildUI()
-        rebuildRegionRows()
     }
+
+    // MARK: UI 构建
 
     private func buildUI() {
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 10
-        stack.edgeInsets = NSEdgeInsets(top: 16, left: 20, bottom: 16, right: 20)
+        stack.edgeInsets = NSEdgeInsets(top: 18, left: 22, bottom: 18, right: 22)
         stack.translatesAutoresizingMaskIntoConstraints = false
 
         func label(_ t: String) -> NSTextField {
@@ -963,31 +1114,30 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
             f.font = .systemFont(ofSize: 12)
             return f
         }
-        func smallField(_ s: String, width: CGFloat = 44) -> NSTextField {
-            let f = NSTextField(string: s)
-            f.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
-            f.alignment = .center
-            f.widthAnchor.constraint(equalToConstant: width).isActive = true
-            f.delegate = self
-            return f
+        func fieldRow(_ views: [NSView]) -> NSStackView {
+            let s = NSStackView(views: views)
+            s.orientation = .horizontal
+            s.spacing = 8
+            return s
         }
 
+        // 名称
+        nameField.font = .systemFont(ofSize: 13)
+        nameField.widthAnchor.constraint(equalToConstant: 380).isActive = true
         nameField.delegate = self
-        nameField.widthAnchor.constraint(equalToConstant: 180).isActive = true
-        colsField.delegate = self
-        rowsField.delegate = self
-        colsField.widthAnchor.constraint(equalToConstant: 44).isActive = true
-        rowsField.widthAnchor.constraint(equalToConstant: 44).isActive = true
+        stack.addArrangedSubview(fieldRow([label("名称"), nameField]))
 
-        stack.addArrangedSubview(label("名称"))
-        stack.addArrangedSubview(nameField)
-        let gridRow = NSStackView(views: [label("网格"), colsField, label("×"), rowsField, label("（列 × 行）")])
-        gridRow.orientation = .horizontal
-        gridRow.spacing = 6
-        stack.addArrangedSubview(gridRow)
-        stack.setCustomSpacing(14, after: gridRow)
+        // 激活快捷键（原版 Activation Shortcut：应用到前台窗口）
+        shortcutRecorder.onRecord = { [weak self] keyCode, modifiers in
+            self?.working.activationKeyCode = Int(keyCode)
+            self?.working.activationModifiers = modifiers
+            self?.shortcutRecorder.title = SettingsWindowController.hotkeyDisplay(keyCode: keyCode, modifiers: modifiers)
+        }
+        shortcutRecorder.widthAnchor.constraint(equalToConstant: 380).isActive = true
+        stack.addArrangedSubview(fieldRow([label("激活快捷键"), shortcutRecorder]))
+        stack.addArrangedSubview(captionText("点击录制；录制后按此快捷键把该布局应用到最前面的窗口。Shift+Esc 清除。—— 实际清除方式：点录制后按 Esc 取消。"))
 
-        // 作用域（对齐原版布局的 "All Screens"）：所有屏幕或指定显示器
+        // 作用域
         scopePopUp.addItem(withTitle: "所有屏幕")
         scopePopUp.lastItem?.representedObject = -1
         for screen in NSScreen.screens {
@@ -995,47 +1145,74 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
             scopePopUp.addItem(withTitle: "仅 \(screen.localizedName)")
             scopePopUp.lastItem?.representedObject = Int(displayID)
             if working.scope == Int(displayID) {
-                scopePopUp.selectItem(withTitle: "仅 \(screen.localizedName)")
+                scopePopUp.select(scopePopUp.lastItem!)
             }
         }
         if working.scope == -1 {
             scopePopUp.selectItem(at: 0)
         }
-        let scopeRow = NSStackView(views: [label("作用域"), scopePopUp])
-        scopeRow.orientation = .horizontal
-        scopeRow.spacing = 8
-        stack.addArrangedSubview(scopeRow)
-        stack.setCustomSpacing(14, after: scopeRow)
+        stack.addArrangedSubview(fieldRow([label("可用屏幕"), scopePopUp]))
 
-        stack.addArrangedSubview(label("区域（单元坐标，1 起；y1 为顶行；格式 x1 y1 x2 y2）"))
-        stack.addArrangedSubview(regionsStack)
+        // 网格密度
+        colsField.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        rowsField.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        colsField.alignment = .center
+        rowsField.alignment = .center
+        colsField.widthAnchor.constraint(equalToConstant: 48).isActive = true
+        rowsField.widthAnchor.constraint(equalToConstant: 48).isActive = true
+        colsField.delegate = self
+        rowsField.delegate = self
+        stack.addArrangedSubview(fieldRow([label("网格密度"), label("宽"), colsField, label("× 高"), rowsField,
+                                           label("（网格越细，区域越精确）")]))
 
-        let addRegion = NSButton(title: "+ 添加区域", target: self, action: #selector(addRegionClicked))
-        let removeRegion = NSButton(title: "− 移除最后区域", target: self, action: #selector(removeRegionClicked))
-        removeRegion.controlSize = .small
-        addRegion.controlSize = .small
-        let regionButtons = NSStackView(views: [addRegion, removeRegion])
-        regionButtons.orientation = .horizontal
-        regionButtons.spacing = 8
-        stack.addArrangedSubview(regionButtons)
-        stack.setCustomSpacing(14, after: regionButtons)
+        // 屏幕布局画布
+        stack.addArrangedSubview(sectionCaption("屏幕布局"))
+        stack.addArrangedSubview(captionText("在网格上「按住拖动」画出区域；点住已画区域拖动可移动；画错点「删除所选区域」。"))
+        canvas.wantsLayer = true
+        canvas.layer?.borderColor = NSColor.separatorColor.cgColor
+        canvas.layer?.borderWidth = 1
+        canvas.layer?.cornerRadius = 4
+        canvas.translatesAutoresizingMaskIntoConstraints = false
+        canvas.widthAnchor.constraint(equalToConstant: 480).isActive = true
+        canvas.heightAnchor.constraint(equalToConstant: 300).isActive = true
+        canvas.onChanged = { [weak self] in
+            self?.syncWorkingFromFields()
+        }
+        deleteRegionButton.bezelStyle = .rounded
+        deleteRegionButton.controlSize = .small
+        deleteRegionButton.target = self
+        deleteRegionButton.action = #selector(deleteRegionClicked)
+        let canvasRow = NSStackView(views: [deleteRegionButton, NSView()])
+        canvasRow.orientation = .horizontal
+        canvasRow.spacing = 8
+        canvasRow.translatesAutoresizingMaskIntoConstraints = false
+        canvasRow.widthAnchor.constraint(equalToConstant: 480).isActive = true
+        canvasRow.arrangedSubviews[1].setContentHuggingPriority(.defaultLow, for: .horizontal)
+        stack.addArrangedSubview(canvas)
+        stack.setCustomSpacing(4, after: canvas)
+        stack.addArrangedSubview(canvasRow)
+        stack.setCustomSpacing(12, after: canvasRow)
 
-        let previewRow = NSStackView(views: [label("预览"), previewView])
-        previewRow.orientation = .horizontal
-        previewRow.spacing = 12
-        stack.addArrangedSubview(previewRow)
-        stack.setCustomSpacing(16, after: previewRow)
+        // 预览
+        stack.addArrangedSubview(sectionCaption("预览"))
+        previewView.wantsLayer = true
+        previewView.layer?.borderColor = NSColor.separatorColor.cgColor
+        previewView.layer?.borderWidth = 1
+        previewView.layer?.cornerRadius = 4
+        stack.addArrangedSubview(previewView)
+        stack.setCustomSpacing(14, after: previewView)
 
-        let cancel = NSButton(title: "取消", target: self, action: #selector(cancelClicked))
-        let commit = NSButton(title: "完成", target: self, action: #selector(commitClicked))
-        commit.keyEquivalent = "\r"
-        commit.bezelStyle = .rounded
+        // 取消 / 保存
+        let cancelButton = NSButton(title: "取消", target: self, action: #selector(cancelClicked))
+        let saveButton = NSButton(title: "保存", target: self, action: #selector(commitClicked))
+        saveButton.keyEquivalent = "\r"
+        saveButton.bezelStyle = .rounded
         let flexible = NSView()
-        let buttons = NSStackView(views: [cancel, flexible, commit])
+        let buttons = NSStackView(views: [cancelButton, flexible, saveButton])
         buttons.orientation = .horizontal
         buttons.spacing = 10
         buttons.translatesAutoresizingMaskIntoConstraints = false
-        buttons.widthAnchor.constraint(equalToConstant: 430).isActive = true
+        buttons.widthAnchor.constraint(equalToConstant: 490).isActive = true
         flexible.setContentHuggingPriority(.defaultLow, for: .horizontal)
         stack.addArrangedSubview(buttons)
 
@@ -1050,79 +1227,54 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
         window.contentView = content
     }
 
-    private func rebuildRegionRows() {
-        regionsStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        regionFields.removeAll()
-
-        for (i, region) in working.regions.enumerated() {
-            let fields = (0..<4).map { _ -> NSTextField in
-                let f = NSTextField(string: "0")
-                f.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
-                f.alignment = .center
-                f.widthAnchor.constraint(equalToConstant: 40).isActive = true
-                f.delegate = self
-                return f
-            }
-            fields[0].stringValue = String(region.x1)
-            fields[1].stringValue = String(region.y1)
-            fields[2].stringValue = String(region.x2)
-            fields[3].stringValue = String(region.y2)
-
-            let indexLabel = NSTextField(labelWithString: "\(i + 1).")
-            indexLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
-            let row = NSStackView(views: [indexLabel, fields[0], fields[1], fields[2], fields[3]])
-            row.orientation = .horizontal
-            row.spacing = 4
-            regionsStack.addArrangedSubview(row)
-            regionFields.append((fields[0], fields[1], fields[2], fields[3]))
-        }
+    private func sectionCaption(_ t: String) -> NSTextField {
+        let f = NSTextField(labelWithString: t)
+        f.font = .systemFont(ofSize: 13, weight: .semibold)
+        return f
     }
 
-    // MARK: - 状态采集
+    private func captionText(_ t: String) -> NSTextField {
+        let f = NSTextField(labelWithString: t)
+        f.font = .systemFont(ofSize: 10)
+        f.textColor = .secondaryLabelColor
+        f.lineBreakMode = .byWordWrapping
+        f.maximumNumberOfLines = 2
+        f.preferredMaxLayoutWidth = 480
+        return f
+    }
 
-    /// 从输入框读取当前工作副本（非法输入回退为原值，实时预览用）
+    // MARK: 状态同步
+
+    /// 画布/字段 → 工作副本（提交与实时预览共用）
     private func syncWorkingFromFields() {
         working.name = nameField.stringValue.isEmpty ? "未命名" : nameField.stringValue
-        working.cols = max(1, min(12, Int(colsField.stringValue) ?? working.cols))
-        working.rows = max(1, min(12, Int(rowsField.stringValue) ?? working.rows))
-        working.scope = (scopePopUp.selectedItem?.representedObject as? Int) ?? -1
-        working.regions = regionFields.enumerated().map { i, f in
-            let old = working.regions.indices.contains(i) ? working.regions[i] : TidyLayout.Region(1, 1, working.cols, working.rows)
-            func v(_ field: NSTextField, _ fallback: Int) -> Int { Int(field.stringValue) ?? fallback }
-            var x1 = max(1, v(f.x1, old.x1)), y1 = max(1, v(f.y1, old.y1))
-            var x2 = max(1, v(f.x2, old.x2)), y2 = max(1, v(f.y2, old.y2))
-            x1 = min(x1, working.cols); x2 = min(x2, working.cols)
-            y1 = min(y1, working.rows); y2 = min(y2, working.rows)
-            if x1 > x2 { swap(&x1, &x2) }
-            if y1 > y2 { swap(&y1, &y2) }
-            return TidyLayout.Region(x1, y1, x2, y2)
+        let cols = max(1, min(12, Int(colsField.stringValue) ?? working.cols))
+        let rows = max(1, min(12, Int(rowsField.stringValue) ?? working.rows))
+        if cols != working.cols || rows != working.rows {
+            working.cols = cols
+            working.rows = rows
+            canvas.setGrid(cols: cols, rows: rows)
         }
+        working.scope = (scopePopUp.selectedItem?.representedObject as? Int) ?? working.scope
+        working.regions = canvas.regions
+        previewView.image = SettingsWindowController.thumbnail(for: working, size: NSSize(width: 200, height: 112))
     }
 
-    private func updatePreview() {
+    func controlTextDidChange(_ obj: Notification) {
         syncWorkingFromFields()
-        previewView.image = SettingsWindowController.thumbnail(for: working, size: NSSize(width: 180, height: 100))
     }
 
-    // MARK: - 动作
-
-    @objc private func addRegionClicked() {
+    @objc private func deleteRegionClicked() {
+        canvas.deleteSelected()
         syncWorkingFromFields()
-        working.regions.append(TidyLayout.Region(1, 1, working.cols, working.rows))
-        rebuildRegionRows()
-        updatePreview()
-    }
-
-    @objc private func removeRegionClicked() {
-        guard working.regions.count > 1 else { return }
-        syncWorkingFromFields()
-        working.regions.removeLast()
-        rebuildRegionRows()
-        updatePreview()
     }
 
     @objc private func commitClicked() {
-        updatePreview()
+        syncWorkingFromFields()
+        // 区域画空时回退为整屏（避免保存出无区域布局）
+        if working.regions.isEmpty {
+            working.regions = [TidyLayout.Region(1, 1, working.cols, working.rows)]
+        }
         onCommit(working)
         window.close()
     }
@@ -1136,12 +1288,7 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
             LayoutEditorWindowController.active = nil
         }
     }
-
-    func controlTextDidChange(_ obj: Notification) {
-        updatePreview()
-    }
 }
-
 // MARK: - 布局列表表格（拖拽排序 / 双击编辑）
 
 extension SettingsWindowController {

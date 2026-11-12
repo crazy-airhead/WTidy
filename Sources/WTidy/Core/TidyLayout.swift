@@ -31,17 +31,23 @@ struct TidyLayout: Codable, Equatable {
     var rows: Int
     var regions: [Region]
     var scope: Int   // -1 = 所有屏幕（默认）；≥0 = 指定 CGDirectDisplayID
+    /// 每布局激活快捷键（原版 Activation Shortcut；nil = 未设置）
+    var activationKeyCode: Int?
+    var activationModifiers: Int?
 
-    init(id: String, name: String, cols: Int, rows: Int, regions: [Region], scope: Int = -1) {
+    init(id: String, name: String, cols: Int, rows: Int, regions: [Region], scope: Int = -1,
+         activationKeyCode: Int? = nil, activationModifiers: Int? = nil) {
         self.id = id
         self.name = name
         self.cols = cols
         self.rows = rows
         self.regions = regions
         self.scope = scope
+        self.activationKeyCode = activationKeyCode
+        self.activationModifiers = activationModifiers
     }
 
-    /// 兼容旧版持久化 JSON（无 scope 字段时回退 -1）
+    /// 兼容旧版持久化 JSON（无 scope/快捷键字段时回退默认）
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
@@ -50,6 +56,8 @@ struct TidyLayout: Codable, Equatable {
         rows = try c.decode(Int.self, forKey: .rows)
         regions = try c.decode([Region].self, forKey: .regions)
         scope = try c.decodeIfPresent(Int.self, forKey: .scope) ?? -1
+        activationKeyCode = try c.decodeIfPresent(Int.self, forKey: .activationKeyCode)
+        activationModifiers = try c.decodeIfPresent(Int.self, forKey: .activationModifiers)
     }
 
     /// 归一化区域矩形（原点左上，0..1）——贴屏换算与缩略图共用
