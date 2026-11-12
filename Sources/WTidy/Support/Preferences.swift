@@ -26,14 +26,6 @@ enum Prefs {
         static let animateWindows = "animateWindows"   // 原版 AnimateWindows
         static let autoGroupLayouts = "autoGroupLayouts" // 原版 AutoGroupLayouts
         static let stripTheme = "stripTheme.v2"        // 图标条配色主题（v2：移除原版蓝后重置）
-        // 快速布局（原版 Quick Layout）
-        static let qlKeyCode = "qlKeyCode"
-        static let qlModifiers = "qlModifiers"
-        static let qlNearCursor = "qlNearCursor"
-        static let qlPosX = "qlPosX"
-        static let qlPosY = "qlPosY"
-        static let qlWidth = "qlWidth"
-        static let qlHeight = "qlHeight"
     }
 
     static var onboardingDone: Bool {
@@ -172,64 +164,7 @@ enum Prefs {
         set { set(newValue, forKey: Keys.stripTheme) }
     }
 
-    // MARK: - 快速布局（原版 Quick Layout）
-
-    /// 全局快捷键（Carbon 键码 + 修饰键），默认 ⌃⌥⌘L（L 键码 37）
-    static var qlKeyCode: UInt32 {
-        get {
-            let v = defaults.object(forKey: Keys.qlKeyCode) == nil ? 37 : defaults.integer(forKey: Keys.qlKeyCode)
-            return UInt32(v)
-        }
-        set { set(Int(newValue), forKey: Keys.qlKeyCode) }
-    }
-
-    static var qlModifiers: Int {
-        get {
-            let v = defaults.object(forKey: Keys.qlModifiers) == nil
-                ? (cmdKey | optionKey | controlKey) : defaults.integer(forKey: Keys.qlModifiers)
-            return v
-        }
-        set { set(newValue, forKey: Keys.qlModifiers) }
-    }
-
-    static var qlNearCursor: Bool {
-        get { defaults.object(forKey: Keys.qlNearCursor) == nil ? true : defaults.bool(forKey: Keys.qlNearCursor) }
-        set { set(newValue, forKey: Keys.qlNearCursor) }
-    }
-
-    static var qlPosX: Double {
-        get {
-            let v = defaults.object(forKey: Keys.qlPosX) == nil ? 0.5 : defaults.double(forKey: Keys.qlPosX)
-            return min(max(v, 0), 1)
-        }
-        set { set(min(max(newValue, 0), 1), forKey: Keys.qlPosX) }
-    }
-
-    static var qlPosY: Double {
-        get {
-            let v = defaults.object(forKey: Keys.qlPosY) == nil ? 0.5 : defaults.double(forKey: Keys.qlPosY)
-            return min(max(v, 0), 1)
-        }
-        set { set(min(max(newValue, 0), 1), forKey: Keys.qlPosY) }
-    }
-
-    /// 快速布局面板宽度（原版默认 512）
-    static var qlWidth: Double {
-        get {
-            let v = defaults.object(forKey: Keys.qlWidth) == nil ? 512 : defaults.double(forKey: Keys.qlWidth)
-            return min(max(v, 240), 1200)
-        }
-        set { set(min(max(newValue, 240), 1200), forKey: Keys.qlWidth) }
-    }
-
-    /// 快速布局面板高度（原版默认 288）
-    static var qlHeight: Double {
-        get {
-            let v = defaults.object(forKey: Keys.qlHeight) == nil ? 288 : defaults.double(forKey: Keys.qlHeight)
-            return min(max(v, 160), 800)
-        }
-        set { set(min(max(newValue, 160), 800), forKey: Keys.qlHeight) }
-    }
+    // MARK: - 快速布局已移除（功能与每布局激活快捷键/拖拽/菜单重叠）
 
     private static func set(_ value: Any?, forKey key: String) {
         defaults.set(value, forKey: key)

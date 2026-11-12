@@ -92,18 +92,14 @@ enum SnapAction: String, CaseIterable {
 /// 与拖拽分屏互为兜底：个别应用不发 AX moved 通知时，快捷键仍可用。
 final class HotkeyManager {
     var actionHandler: ((SnapAction) -> Void)?
-    /// 快速布局全局热键（对齐原版 Quick Layout Activation）
-    var quickLayoutHandler: (() -> Void)?
 
     private var hotKeyRefs: [SnapAction: EventHotKeyRef] = [:]
-    private var qlHotKeyRef: EventHotKeyRef?
     private var layoutHotKeyRefs: [EventHotKeyRef] = []
     /// 每布局激活快捷键：热键 id → 布局 id（原版每布局 Activation Shortcut）
     private var layoutShortcutMap: [UInt32: String] = [:]
     var layoutShortcutHandler: ((String) -> Void)?
     private var handlerInstalled = false
     private let signature: OSType = 0x57546479 // 'WTdy'
-    private static let qlHotKeyID: UInt32 = 999
     private static let layoutHotKeyBase: UInt32 = 3000
 
     static let shared = HotkeyManager()
@@ -132,17 +128,6 @@ final class HotkeyManager {
             }
         }
 
-        // 快速布局热键
-        var qlRef: EventHotKeyRef?
-        let qlID = EventHotKeyID(signature: signature, id: Self.qlHotKeyID)
-        let qlErr = RegisterEventHotKey(Prefs.qlKeyCode, UInt32(Prefs.qlModifiers), qlID,
-                                        GetApplicationEventTarget(), 0, &qlRef)
-        if qlErr == noErr, let qlRef = qlRef {
-            qlHotKeyRef = qlRef
-        } else {
-            AppLog.warn("注册快速布局热键失败 err=\(qlErr)")
-        }
-
         // 每布局激活快捷键（原版 Activation Shortcut）：应用到前台窗口
         layoutShortcutMap.removeAll()
         var seq = Self.layoutHotKeyBase
@@ -158,7 +143,7 @@ final class HotkeyManager {
             }
             seq += 1
         }
-        AppLog.info("快捷键已注册 \(hotKeyRefs.count)/\(SnapAction.allCases.count) + 快速布局 + 布局快捷键 \(layoutShortcutMap.count)")
+        AppLog.info("快捷键已注册 \(hotKeyRefs.count)/\(SnapAction.allCases.count) + 布局快捷键 \(layoutShortcutMap.count)")
     }
 
     func unregisterAll() {
@@ -166,10 +151,6 @@ final class HotkeyManager {
             UnregisterEventHotKey(ref)
         }
         hotKeyRefs.removeAll()
-        if let ref = qlHotKeyRef {
-            UnregisterEventHotKey(ref)
-            qlHotKeyRef = nil
-        }
         for ref in layoutHotKeyRefs {
             UnregisterEventHotKey(ref)
         }
@@ -193,12 +174,6 @@ final class HotkeyManager {
                                            &hkID)
             guard status == noErr else { return noErr }
             let manager = Unmanaged<HotkeyManager>.fromOpaque(userData!).takeUnretainedValue()
-            if hkID.id == HotkeyManager.qlHotKeyID {
-                DispatchQueue.main.async {
-                    manager.quickLayoutHandler?()
-                }
-                return noErr
-            }
             if hkID.id >= HotkeyManager.layoutHotKeyBase,
                let layoutID = manager.layoutShortcutMap[hkID.id] {
                 DispatchQueue.main.async {

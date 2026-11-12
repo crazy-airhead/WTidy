@@ -29,8 +29,8 @@ struct SettingsRenderTests {
         // tab 高度 = 窗口内容高 − 底部原版式底栏（46pt 栏 + 上下 16pt 间距）
         #expect(abs(tab.frame.height - (bounds.height - 62)) < 1,
                 "tab 容器高度应占据底栏以上区域：\(tab.frame) vs \(bounds)")
-        #expect(tab.tabViewItems.count == 5, "布局/行为/定位/快速布局/关于");
-        #expect(tab.tabViewItems.map(\.label) == ["布局", "行为", "定位", "快速布局", "关于"])
+        #expect(tab.tabViewItems.count == 4, "布局/行为/定位/关于");
+        #expect(tab.tabViewItems.map(\.label) == ["布局", "行为", "定位", "关于"])
 
         // 注意：AppKit frame 坐标原点在左下角——顶对齐的视图 maxY ≈ 容器高度。
         // NSStackView 自身 flipped，绘制自顶向下；frame 仍在容器坐标系里。

@@ -12,7 +12,6 @@ final class StatusMenuController: NSObject {
     struct Hooks {
         var openSettings: () -> Void
         var requestPermissions: () -> Void
-        var showQuickLayout: () -> Void
         var applyLayoutByID: (String) -> Void
         var restoreAllWindows: () -> Void
         var moveToActiveDisplay: () -> Void
@@ -33,7 +32,7 @@ final class StatusMenuController: NSObject {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
 
-        // 对齐原版极简菜单：状态 / 布局 / 快速布局 / 恢复 / 设置 / 退出
+        // 对齐原版极简菜单：状态 / 布局 / 恢复 / 设置 / 退出
         let menu = NSMenu()
         menu.autoenablesItems = false
         menu.delegate = self
@@ -47,9 +46,6 @@ final class StatusMenuController: NSObject {
         layoutSubmenu.submenu = NSMenu()
         layoutSubmenu.submenu?.delegate = self
         menu.addItem(layoutSubmenu)
-        let quickItem = NSMenuItem(title: L("快速布局"), action: #selector(showQuickLayout), keyEquivalent: "l")
-        quickItem.target = self
-        menu.addItem(quickItem)
         restoreAllItem.target = self
         restoreAllItem.action = #selector(restoreAllClicked)
         menu.addItem(restoreAllItem)
@@ -124,8 +120,6 @@ final class StatusMenuController: NSObject {
     }
 
     @objc private func openSettings() { hooks?.openSettings() }
-
-    @objc private func showQuickLayout() { hooks?.showQuickLayout() }
 
     /// Options：「Show Window Tidy status icon」
     func setVisible(_ visible: Bool) {

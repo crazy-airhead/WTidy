@@ -24,7 +24,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         status.configure(hooks: .init(
             openSettings: { [weak self] in self?.openSettings() },
             requestPermissions: { [weak self] in self?.requestPermissions() },
-            showQuickLayout: { QuickLayoutController.shared.show() },
             applyLayoutByID: { [weak self] id in
                 _ = self?.overlay.applyLayoutByID(id)
             },
@@ -35,7 +34,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 _ = self?.overlay.moveFrontmostToActiveDisplay()
             }
         ))
-        QuickLayoutController.shared.overlay = overlay
         status.setVisible(Prefs.showStatusIcon)
 
         if let last = Prefs.lastSnap {
@@ -53,9 +51,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         HotkeyManager.shared.actionHandler = { [weak self] action in
             self?.overlay.snapFrontmost(action)
-        }
-        HotkeyManager.shared.quickLayoutHandler = {
-            QuickLayoutController.shared.show()
         }
         HotkeyManager.shared.layoutShortcutHandler = { [weak self] layoutID in
             _ = self?.overlay.applyLayoutByID(layoutID)

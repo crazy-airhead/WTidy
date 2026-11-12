@@ -37,7 +37,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         tabView.addTabViewItem(layoutsTab())
         tabView.addTabViewItem(optionsTab())
         tabView.addTabViewItem(positioningTab())
-        tabView.addTabViewItem(quickLayoutTab())
         tabView.addTabViewItem(aboutTab())
 
         // 底部栏。窗口固定尺寸不可缩放，全部用静态 frame（零 Auto Layout，
@@ -77,8 +76,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         // 输入框的 action 只在按回车时触发——点「完成」前强制提交所有字段
         Prefs.stripMaxWidth = Double(maxWidthField.stringValue) ?? Prefs.stripMaxWidth
         Prefs.stripMargin = Double(marginField.stringValue) ?? Prefs.stripMargin
-        Prefs.qlWidth = Double(qlWidthField.stringValue) ?? Prefs.qlWidth
-        Prefs.qlHeight = Double(qlHeightField.stringValue) ?? Prefs.qlHeight
         refreshState()
         window.orderOut(nil)
     }
@@ -432,81 +429,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         return item
     }
 
-    // MARK: - 快速布局页（原版 Quick Layout）
-
-    private let qlRecorder = HotkeyRecorderButton(title: "")
-    private let qlNearCursorCheck = NSButton(checkboxWithTitle: L("显示在鼠标光标附近"), target: nil, action: nil)
-    private let qlPosHSlider = NSSlider(value: 0.5, minValue: 0, maxValue: 1, target: nil, action: nil)
-    private let qlPosVSlider = NSSlider(value: 0.5, minValue: 0, maxValue: 1, target: nil, action: nil)
-    private let qlPreview = ScreenPositionPreviewView(frame: NSRect(x: 0, y: 0, width: 600, height: 300))
-    private let qlWidthField = NSTextField(string: "512")
-    private let qlHeightField = NSTextField(string: "288")
-
-    private func quickLayoutTab() -> NSTabViewItem {
-        let (content, stack) = makePage()
-
-        func label(_ t: String) -> NSTextField {
-            let f = NSTextField(labelWithString: t)
-            f.font = .systemFont(ofSize: 12)
-            return f
-        }
-
-        stack.addArrangedSubview(sectionTitle(L("激活")))
-        stack.addArrangedSubview(captionText(L("全局快捷键呼出快速布局面板：点选图标即把前台窗口吸到对应区域（含图标内投影选区）。Esc 或点击面板外关闭。")))
-        qlRecorder.onRecord = { [weak self] keyCode, modifiers in
-            Prefs.qlKeyCode = keyCode
-            Prefs.qlModifiers = modifiers
-            self?.refreshState()
-        }
-        qlRecorder.widthAnchor.constraint(equalToConstant: 260).isActive = true
-        stack.addArrangedSubview(qlRecorder)
-
-        stack.addArrangedSubview(sectionTitle(L("面板位置")))
-        qlNearCursorCheck.target = self
-        qlNearCursorCheck.action = #selector(qlNearCursorChanged)
-        stack.addArrangedSubview(qlNearCursorCheck)
-        // 原版式：横滑杆在下、纵滑杆在右 + 单图标预览
-        qlPosHSlider.target = self
-        qlPosHSlider.action = #selector(qlPosHChanged)
-        qlPosHSlider.isContinuous = true
-        qlPosHSlider.widthAnchor.constraint(equalToConstant: 600).isActive = true
-        qlPosVSlider.target = self
-        qlPosVSlider.action = #selector(qlPosVChanged)
-        qlPosVSlider.isContinuous = true
-        qlPosVSlider.isVertical = true
-        qlPosVSlider.widthAnchor.constraint(equalToConstant: 24).isActive = true
-        qlPosVSlider.heightAnchor.constraint(equalToConstant: 300).isActive = true
-
-        qlPreview.translatesAutoresizingMaskIntoConstraints = false
-        qlPreview.widthAnchor.constraint(equalToConstant: 600).isActive = true
-        qlPreview.heightAnchor.constraint(equalToConstant: 300).isActive = true
-        let qlColumn = NSStackView(views: [qlPreview, qlPosHSlider])
-        qlColumn.orientation = .vertical
-        qlColumn.spacing = 8
-        qlColumn.alignment = .leading
-        let qlPosRow = NSStackView(views: [qlColumn, qlPosVSlider])
-        qlPosRow.orientation = .horizontal
-        qlPosRow.spacing = 10
-        stack.addArrangedSubview(qlPosRow)
-
-        stack.addArrangedSubview(sectionTitle(L("面板尺寸")))
-        qlWidthField.target = self
-        qlWidthField.action = #selector(qlWidthCommitted)
-        qlHeightField.target = self
-        qlHeightField.action = #selector(qlHeightCommitted)
-        qlWidthField.widthAnchor.constraint(equalToConstant: 70).isActive = true
-        qlHeightField.widthAnchor.constraint(equalToConstant: 70).isActive = true
-        let dimsRow = NSStackView(views: [label(L("宽度")), qlWidthField, label(L("高度")), qlHeightField])
-        dimsRow.orientation = .horizontal
-        dimsRow.spacing = 8
-        stack.addArrangedSubview(dimsRow)
-
-        let item = NSTabViewItem(identifier: "quicklayout")
-        item.label = L("快速布局")
-        item.view = content
-        return item
-    }
-
     private func aboutTab() -> NSTabViewItem {
         let content = NSView(frame: NSRect(x: 0, y: 0, width: 580, height: 512))
 
@@ -573,8 +495,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
             radio.target = self
             radio.action = #selector(stripThemeChanged)
         }
-        qlNearCursorCheck.target = self
-        qlNearCursorCheck.action = #selector(qlNearCursorChanged)
     }
 
     private func refreshState() {
@@ -617,17 +537,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         maxWidthField.stringValue = String(Int(Prefs.stripMaxWidth))
         marginField.stringValue = String(Int(Prefs.stripMargin))
         posPreview.needsDisplay = true
-
-        // 快速布局页
-        qlRecorder.title = Self.hotkeyDisplay(keyCode: Prefs.qlKeyCode, modifiers: Prefs.qlModifiers)
-        qlNearCursorCheck.state = Prefs.qlNearCursor ? .on : .off
-        qlPosHSlider.doubleValue = Prefs.qlPosX
-        qlPosVSlider.doubleValue = 1 - Prefs.qlPosY
-        qlPosHSlider.isEnabled = !Prefs.qlNearCursor
-        qlPosVSlider.isEnabled = !Prefs.qlNearCursor
-        qlWidthField.stringValue = String(Int(Prefs.qlWidth))
-        qlHeightField.stringValue = String(Int(Prefs.qlHeight))
-        qlPreview.needsDisplay = true
     }
 
     @objc private func toggleDrag() { Prefs.dragEnabled = dragCheck.state == .on }
@@ -697,17 +606,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
 
     // MARK: - 快速布局页动作
 
-    @objc private func qlNearCursorChanged() { Prefs.qlNearCursor = qlNearCursorCheck.state == .on; refreshState() }
-    @objc private func qlPosHChanged(_ sender: NSSlider) { Prefs.qlPosX = sender.doubleValue; qlPreview.needsDisplay = true }
-    @objc private func qlPosVChanged(_ sender: NSSlider) { Prefs.qlPosY = 1 - sender.doubleValue; qlPreview.needsDisplay = true }
-    @objc private func qlWidthCommitted(_ sender: NSTextField) {
-        Prefs.qlWidth = Double(sender.stringValue) ?? Prefs.qlWidth
-        refreshState()
-    }
-    @objc private func qlHeightCommitted(_ sender: NSTextField) {
-        Prefs.qlHeight = Double(sender.stringValue) ?? Prefs.qlHeight
-        refreshState()
-    }
 
     /// Carbon 键码 → 可读符号（常用键位映射，未收录的回退为 Key#）
     static func hotkeyDisplay(keyCode: UInt32, modifiers: Int) -> String {
@@ -774,14 +672,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
 // 图标绘制共用 LayoutIconRenderer——预览里看到的比例和位置就是拖拽时的实际效果。
 
 final class ScreenPositionPreviewView: NSView {
-    enum Mode {
-        case strip        // 布局图标条（定位页）
-        case quickLayout  // 快速布局面板块（快速布局页）
-    }
-
-    var mode: Mode = .strip {
-        didSet { needsDisplay = true }
-    }
 
     override func draw(_ dirtyRect: NSRect) {
         // 迷你屏幕按「真实主屏可见区」的尺寸与宽高比等比缩放绘制——
@@ -810,8 +700,7 @@ final class ScreenPositionPreviewView: NSView {
         path.lineWidth = 1
         path.stroke()
 
-        switch mode {
-        case .strip:
+        // 布局图标条预览：真实屏幕等比 + 浅色风格图标
             let rects = StripGeometry.iconRects(layoutCount: LayoutStore.layouts.count, in: vf)
             let layouts = LayoutStore.layouts
             for (i, r) in rects.enumerated() where layouts.indices.contains(i) {
@@ -820,18 +709,6 @@ final class ScreenPositionPreviewView: NSView {
                                       width: r.width * k,
                                       height: r.height * k)
                 LayoutIconRenderer.draw(layout: layouts[i], in: viewRect, flipped: false, style: .light)
-            }
-
-        case .quickLayout:
-            // 原版 Quick Layout：呼出的是「一个布局图标」（壁纸网格风）
-            let w = CGFloat(Prefs.qlWidth) * k
-            let h = CGFloat(Prefs.qlHeight) * k
-            let x = screen.minX + CGFloat(Prefs.qlPosX) * max(0, screen.width - w)
-            let y = screen.maxY - CGFloat(Prefs.qlPosY) * max(0, screen.height - h) - h
-            let iconRect = NSRect(x: x, y: y, width: w, height: h)
-            let layout = LayoutStore.displayLayouts(for: nil).first
-                ?? TidyLayout.builtins[0]
-            LayoutIconRenderer.draw(layout: layout, in: iconRect, flipped: false, style: .light)
         }
     }
 }
