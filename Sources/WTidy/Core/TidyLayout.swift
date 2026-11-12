@@ -127,7 +127,14 @@ enum LayoutStore {
         get {
             if let data = UserDefaults.standard.data(forKey: key),
                let list = try? JSONDecoder().decode([TidyLayout].self, from: data), !list.isEmpty {
-                return list
+                // 内置布局名称实时取当前语言翻译——JSON 持久化的是保存当时的语言，
+                // 切语言后不重译会出现"英文界面夹中文"
+                return list.map { item in
+                    guard let builtin = TidyLayout.builtins.first(where: { $0.id == item.id }) else { return item }
+                    var translated = item
+                    translated.name = builtin.name   // builtins 名称经 L() 求值，随启动语言
+                    return translated
+                }
             }
             return TidyLayout.builtins
         }

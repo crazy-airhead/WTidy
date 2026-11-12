@@ -139,3 +139,22 @@
 "%1$@ 区域%2$d" = "%1$@ region %2$d";
 "已恢复 %d 个窗口原位置" = "Restored %d windows to original positions";
 "已移动到 %@" = "Moved to %@";
+
+/* 设计语言核对补齐（2026-11-12）：此前漏包 L()/LF() 的界面文案 */
+"新增布局" = "New Layout";
+"仅 %@" = "Only %@";
+"恢复原位置 · %@" = "Restore original position · %@";
+"居中（保持尺寸） · %@" = "Center (keep size) · %@";
+"⚠️ 未能完全调整尺寸（偏差 %dpt）— " = "⚠️ Couldn't fully resize (off by %dpt) — ";
+"%d × %d 网格，从 (%d, %d) 到 (%d, %d)" = "%d × %d grid, from (%d, %d) to (%d, %d)";
+"%d × %d 网格，%d 个区域" = "%d × %d grid, %d regions";
+"%d × %d 网格" = "%d × %d grid";
+"拖拽任意窗口，屏幕顶部会出现布局条；悬停选择布局后松手即吸附。\n快捷键示例：⌥⌘← 左半屏，⌃⌥⌘F 最大化，⌃⌥⌘Z 恢复位置。" = "Drag any window — a layout bar appears at the top of the screen; hover to pick a layout and release to snap.\nHotkey examples: ⌥⌘← left half, ⌃⌥⌘F maximize, ⌃⌥⌘Z restore position.";
+"arm64 原生 · 看门狗自愈 · 现代登录项\n重制致敬 Window Tidy（Light Pillar, 2011–2017）" = "arm64 native · self-healing watchdog · modern login item\nA native remake honoring Window Tidy (Light Pillar, 2011–2017)";
+"arm64 原生 · 看门狗自愈 · 现代登录项
+重制致敬 Window Tidy（Light Pillar, 2011–2017）" = "arm64 native · Watchdog self-healing · Modern login item
+A remake in honor of Window Tidy (Light Pillar, 2011–2017)";
+"拖动可更改布局顺序，双击编辑；双击后可在编辑器里为布局录制专属激活快捷键。固定方向快捷键（⌥⌘←/→ 等）始终可用。" = "Drag to reorder layouts; double-click to edit and record a per-layout activation shortcut. Fixed directional shortcuts (⌥⌘←/→ etc.) are always available.";
+"拖拽任意窗口，屏幕顶部会出现布局条；悬停选择布局后松手即吸附。
+快捷键示例：⌥⌘← 左半屏，⌃⌥⌘F 最大化，⌃⌥⌘Z 恢复位置。" = "Drag any window — the layout strip appears at the top; hover to pick a layout and release to snap.
+Shortcut examples: ⌥⌘← left half, ⌃⌥⌘F maximize, ⌃⌥⌘Z restore position.";
