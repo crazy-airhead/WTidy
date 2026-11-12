@@ -24,7 +24,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         status.configure(hooks: .init(
             openSettings: { [weak self] in self?.openSettings() },
             requestPermissions: { [weak self] in self?.requestPermissions() },
-            restart: { [weak self] in self?.restart() },
             showQuickLayout: { QuickLayoutController.shared.show() },
             applyLayoutByID: { [weak self] id in
                 _ = self?.overlay.applyLayoutByID(id)
@@ -69,7 +68,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationCenter.default.addObserver(
             forName: .prefsChanged, object: nil, queue: .main
         ) { [weak self] _ in
-            self?.status.refreshToggles()
             self?.status.setVisible(Prefs.showStatusIcon)
             // 防抖：滑杆连续滑动等场景会高频触发，Carbon 重注册开销大
             // （曾把滑杆拖拽跟踪循环卡死），200ms 合并一次

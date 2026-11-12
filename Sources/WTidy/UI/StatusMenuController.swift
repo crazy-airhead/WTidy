@@ -12,7 +12,6 @@ final class StatusMenuController: NSObject {
     struct Hooks {
         var openSettings: () -> Void
         var requestPermissions: () -> Void
-        var restart: () -> Void
         var showQuickLayout: () -> Void
         var applyLayoutByID: (String) -> Void
         var restoreAllWindows: () -> Void
@@ -21,12 +20,9 @@ final class StatusMenuController: NSObject {
 
     private let statusItem: NSStatusItem
     private var hooks: Hooks?
+    private var lastSnapText: String?
 
     private let statusLine = NSMenuItem(title: "…", action: nil, keyEquivalent: "")
-    private let lastSnapLine = NSMenuItem(title: "最近吸附：—", action: nil, keyEquivalent: "")
-    private let dragToggle = NSMenuItem(title: "拖拽分屏", action: nil, keyEquivalent: "")
-    private let hotkeyToggle = NSMenuItem(title: "全局快捷键", action: nil, keyEquivalent: "")
-    private let loginToggle = NSMenuItem(title: "开机自动启动", action: nil, keyEquivalent: "")
     private let layoutSubmenu = NSMenuItem(title: "应用布局到前台窗口", action: nil, keyEquivalent: "")
     private let restoreAllItem = NSMenuItem(title: "恢复所有窗口位置", action: nil, keyEquivalent: "")
     private let moveToDisplayItem = NSMenuItem(title: "移动窗口到活动显示器", action: nil, keyEquivalent: "")
@@ -37,6 +33,7 @@ final class StatusMenuController: NSObject {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
 
+        // 对齐原版极简菜单：状态 / 布局 / 快速布局 / 恢复 / 设置 / 退出
         let menu = NSMenu()
         menu.autoenablesItems = false
         menu.delegate = self
@@ -44,29 +41,15 @@ final class StatusMenuController: NSObject {
         statusLine.action = #selector(statusLineClicked)
         statusLine.isEnabled = true
         menu.addItem(statusLine)
-        lastSnapLine.isEnabled = false
-        menu.addItem(lastSnapLine)
         menu.addItem(.separator())
-
-        dragToggle.target = self
-        dragToggle.action = #selector(toggleDrag)
-        dragToggle.isEnabled = true
-        menu.addItem(dragToggle)
-        hotkeyToggle.target = self
-        hotkeyToggle.action = #selector(toggleHotkeys)
-        hotkeyToggle.isEnabled = true
-        menu.addItem(hotkeyToggle)
-        menu.addItem(.separator())
-
-        loginToggle.target = self
-        loginToggle.action = #selector(toggleLogin)
-        loginToggle.isEnabled = true
-        menu.addItem(loginToggle)
 
         // 布局子菜单（原版主菜单的 Apply Layout）：打开时动态重建
         layoutSubmenu.submenu = NSMenu()
         layoutSubmenu.submenu?.delegate = self
         menu.addItem(layoutSubmenu)
+        let quickItem = NSMenuItem(title: "快速布局", action: #selector(showQuickLayout), keyEquivalent: "l")
+        quickItem.target = self
+        menu.addItem(quickItem)
         restoreAllItem.target = self
         restoreAllItem.action = #selector(restoreAllClicked)
         menu.addItem(restoreAllItem)
@@ -75,27 +58,15 @@ final class StatusMenuController: NSObject {
         menu.addItem(moveToDisplayItem)
         menu.addItem(.separator())
 
-        let quickItem = NSMenuItem(title: "快速布局", action: #selector(showQuickLayout), keyEquivalent: "l")
-        quickItem.target = self
-        menu.addItem(quickItem)
         let settingsItem = NSMenuItem(title: "设置…", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
-        let logItem = NSMenuItem(title: "打开日志", action: #selector(openLog), keyEquivalent: "")
-        logItem.target = self
-        menu.addItem(logItem)
-        menu.addItem(.separator())
-
-        let restartItem = NSMenuItem(title: "重启 WTidy", action: #selector(restart), keyEquivalent: "r")
-        restartItem.target = self
-        menu.addItem(restartItem)
         let quitItem = NSMenuItem(title: "退出 WTidy", action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
 
         statusItem.menu = menu
         update(state: .ok)
-        refreshToggles()
     }
 
     func configure(hooks: Hooks) {
@@ -107,12 +78,13 @@ final class StatusMenuController: NSObject {
     func update(state: State) {
         attractTimer?.invalidate()
         attractTimer = nil
+        let snapDetail = lastSnapText.map { "最近吸附：\($0)" }
         switch state {
         case .ok:
             statusItem.button?.image = Self.symbolImage("rectangle.split.2x2", tint: nil, alpha: 1)
             statusItem.button?.alphaValue = 1
             statusLine.attributedTitle = Self.dotTitle("正常监听中", color: .systemGreen,
-                                                       detail: "拖拽任意窗口顶部即可分屏")
+                                                       detail: snapDetail ?? "拖拽任意窗口顶部即可分屏")
         case .noPermission:
             statusItem.button?.image = Self.symbolImage("exclamationmark.triangle.fill", tint: .systemYellow, alpha: 1)
             statusLine.attributedTitle = Self.dotTitle("缺少辅助功能权限", color: .systemYellow,
@@ -122,7 +94,7 @@ final class StatusMenuController: NSObject {
             statusItem.button?.image = Self.symbolImage("rectangle.split.2x2", tint: nil, alpha: 0.35)
             statusItem.button?.alphaValue = 1
             statusLine.attributedTitle = Self.dotTitle("拖拽分屏已暂停", color: .systemGray,
-                                                       detail: "在下方开关中重新开启")
+                                                       detail: "在设置中重新开启")
         }
     }
 
@@ -137,19 +109,8 @@ final class StatusMenuController: NSObject {
     }
 
     func setLastSnap(_ text: String) {
-        lastSnapLine.title = "最近吸附：\(text)"
-    }
-
-    func refreshToggles() {
-        dragToggle.state = Prefs.dragEnabled ? .on : .off
-        hotkeyToggle.state = Prefs.hotkeysEnabled ? .on : .off
-        if LoginItemController.isAvailable {
-            loginToggle.state = LoginItemController.isEnabled ? .on : .off
-        } else {
-            loginToggle.isEnabled = false
-            loginToggle.state = .off
-            loginToggle.title = "开机自动启动（安装到 /Applications 后可用）"
-        }
+        lastSnapText = text
+        update(state: currentRenderState)
     }
 
     // MARK: - 动作
@@ -162,23 +123,6 @@ final class StatusMenuController: NSObject {
         }
     }
 
-    @objc private func toggleDrag() {
-        Prefs.dragEnabled = !Prefs.dragEnabled
-        refreshToggles()
-        AppLog.info("拖拽分屏开关 → \(Prefs.dragEnabled)")
-    }
-
-    @objc private func toggleHotkeys() {
-        Prefs.hotkeysEnabled = !Prefs.hotkeysEnabled
-        refreshToggles()
-        AppLog.info("快捷键开关 → \(Prefs.hotkeysEnabled)")
-    }
-
-    @objc private func toggleLogin() {
-        LoginItemController.setEnabled(!LoginItemController.isEnabled)
-        refreshToggles()
-    }
-
     @objc private func openSettings() { hooks?.openSettings() }
 
     @objc private func showQuickLayout() { hooks?.showQuickLayout() }
@@ -187,12 +131,6 @@ final class StatusMenuController: NSObject {
     func setVisible(_ visible: Bool) {
         statusItem.isVisible = visible
     }
-
-    @objc private func openLog() {
-        NSWorkspace.shared.open(AppLog.shared.logPath)
-    }
-
-    @objc private func restart() { hooks?.restart() }
 
     @objc private func quit() {
         NSApp.terminate(nil)
@@ -243,7 +181,6 @@ extension StatusMenuController: NSMenuDelegate {
             rebuildLayoutSubmenu(menu)
             return
         }
-        refreshToggles()
         update(state: currentRenderState)
     }
 
