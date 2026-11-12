@@ -6,7 +6,7 @@ import Carbon.HIToolbox
 /// 各 tab 页内部只用「单边/居中」约束（和引导窗口同款、已验证可靠的模式）。
 /// —— 此前两版（手动约束 NSTabView、NSTabViewController）都因根视图缺少尺寸
 ///    约束而内容塌陷错位，教训：tab 容器一律用 frame + autoresizingMask。
-final class SettingsWindowController: NSObject, NSWindowDelegate {
+final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate {
     static let shared = SettingsWindowController()
 
     private let window: NSWindow
@@ -22,7 +22,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private var hotkeyToggles: [NSButton] = []
 
     override init() {
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 580, height: 680),
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 680),
                           styleMask: [.titled, .closable],
                           backing: .buffered, defer: false)
         super.init()
@@ -87,95 +87,68 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     // MARK: - Tab 页构建
 
-    /// 布局页：对齐原版 Layouts 标签——布局列表（增删改排序）+ 编辑器
-    private var layoutsStack: NSStackView!
+    /// 布局页：对齐原版 Layouts——列表（拖拽排序 / 双击编辑）+ 左下角 +/−
+    private let layoutTable = NSTableView()
+    private let layoutScrollView = NSScrollView()
+    private static let layoutDragType = NSPasteboard.PasteboardType("com.allblue.wtidy.layoutrow")
 
     private func layoutsTab() -> NSTabViewItem {
         let (content, stack) = makePage()
-        stack.spacing = 6
+        stack.spacing = 8
 
-        let caption = captionText("图标条按此列表顺序展示。点击「编辑」调整名称、网格与区域（对齐原版的网格区域模型）。")
+        let caption = captionText("拖动可更改布局顺序，双击某行编辑其设置。图标条按此列表顺序展示。")
         stack.addArrangedSubview(caption)
         stack.setCustomSpacing(10, after: caption)
 
-        layoutsStack = NSStackView()
-        layoutsStack.orientation = .vertical
-        layoutsStack.alignment = .leading
-        layoutsStack.spacing = 4
-        stack.addArrangedSubview(layoutsStack)
+        // 列表
+        layoutTable.headerView = nil
+        layoutTable.rowHeight = 96
+        layoutTable.dataSource = self
+        layoutTable.delegate = self
+        layoutTable.target = self
+        layoutTable.doubleAction = #selector(layoutRowDoubleClicked)
+        layoutTable.allowsColumnReordering = false
+        layoutTable.intercellSpacing = NSSize(width: 0, height: 8)
+        layoutTable.style = .plain
+        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("layout"))
+        column.width = 640
+        layoutTable.addTableColumn(column)
 
-        rebuildLayoutRows()
+        layoutScrollView.documentView = layoutTable
+        layoutScrollView.hasVerticalScroller = true
+        layoutScrollView.autohidesScrollers = true
+        layoutScrollView.drawsBackground = false
+        layoutScrollView.translatesAutoresizingMaskIntoConstraints = false
+        layoutScrollView.heightAnchor.constraint(equalToConstant: 420).isActive = true
+        layoutScrollView.widthAnchor.constraint(equalToConstant: 660).isActive = true
+        stack.addArrangedSubview(layoutScrollView)
+        stack.setCustomSpacing(12, after: layoutScrollView)
 
-        // 底部：新增 / 恢复内置
-        let addButton = NSButton(title: "新增布局", target: self, action: #selector(addLayoutClicked))
+        // 左下角 +/−（对齐原版），右侧保留「恢复内置」
+        let addButton = NSButton(title: "＋", target: self, action: #selector(addLayoutClicked))
+        addButton.bezelStyle = .rounded
+        addButton.widthAnchor.constraint(equalToConstant: 40).isActive = true
+        let removeButton = NSButton(title: "－", target: self, action: #selector(removeSelectedLayout))
+        removeButton.bezelStyle = .rounded
+        removeButton.widthAnchor.constraint(equalToConstant: 40).isActive = true
         let resetButton = NSButton(title: "恢复内置布局", target: self, action: #selector(resetLayoutsClicked))
-        let bottom = NSStackView(views: [addButton, resetButton])
+        resetButton.bezelStyle = .rounded
+        let plusMinus = NSStackView(views: [addButton, removeButton])
+        plusMinus.orientation = .horizontal
+        plusMinus.spacing = 6
+        let flexible = NSView()
+        let bottom = NSStackView(views: [plusMinus, flexible, resetButton])
         bottom.orientation = .horizontal
         bottom.spacing = 8
-        stack.setCustomSpacing(12, after: layoutsStack)
+        bottom.translatesAutoresizingMaskIntoConstraints = false
+        bottom.widthAnchor.constraint(equalToConstant: 660).isActive = true
+        flexible.setContentHuggingPriority(.defaultLow, for: .horizontal)
         stack.addArrangedSubview(bottom)
 
         let item = NSTabViewItem(identifier: "layouts")
         item.label = "布局"
         item.view = content
         return item
-    }
-
-    private func rebuildLayoutRows() {
-        guard let stack = layoutsStack else { return }
-        stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
-
-        for (index, layout) in LayoutStore.layouts.enumerated() {
-            // 原版式行：大缩略图 + 名称 + 网格区域描述 + 作用域
-            let thumb = NSImageView(image: Self.thumbnail(for: layout, size: NSSize(width: 96, height: 54)))
-
-            let name = NSTextField(labelWithString: layout.name)
-            name.font = .systemFont(ofSize: 13, weight: .semibold)
-
-            let desc: String
-            if let first = layout.regions.first {
-                desc = layout.regions.count == 1
-                    ? "\(layout.cols) × \(layout.rows) 网格，从 (\(first.x1), \(first.y1)) 到 (\(first.x2), \(first.y2))"
-                    : "\(layout.cols) × \(layout.rows) 网格，\(layout.regions.count) 个区域"
-            } else {
-                desc = "\(layout.cols) × \(layout.rows) 网格"
-            }
-            let descLabel = NSTextField(labelWithString: desc)
-            descLabel.font = .systemFont(ofSize: 11)
-            descLabel.textColor = .secondaryLabelColor
-
-            let scopeLabel = NSTextField(labelWithString: layout.scope == -1 ? "所有屏幕" : "仅指定显示器")
-            scopeLabel.font = .systemFont(ofSize: 11)
-            scopeLabel.textColor = .tertiaryLabelColor
-
-            let texts = NSStackView(views: [name, descLabel, scopeLabel])
-            texts.orientation = .vertical
-            texts.alignment = .leading
-            texts.spacing = 1
-
-            func smallButton(_ title: String, _ action: Selector, _ tag: Int) -> NSButton {
-                let b = NSButton(title: title, target: self, action: action)
-                b.tag = tag
-                b.controlSize = .small
-                return b
-            }
-            let up = smallButton("↑", #selector(moveLayoutUp(_:)), index)
-            let down = smallButton("↓", #selector(moveLayoutDown(_:)), index)
-            let edit = smallButton("编辑", #selector(editLayoutClicked(_:)), index)
-            let remove = smallButton("删除", #selector(removeLayoutClicked(_:)), index)
-            up.isEnabled = index > 0
-            down.isEnabled = index < LayoutStore.layouts.count - 1
-
-            let flexible = NSView()
-            let row = NSStackView(views: [thumb, texts, flexible, up, down, edit, remove])
-            row.orientation = .horizontal
-            row.spacing = 8
-            row.alignment = .centerY
-            row.translatesAutoresizingMaskIntoConstraints = false
-            row.widthAnchor.constraint(equalToConstant: 508).isActive = true
-            flexible.setContentHuggingPriority(.defaultLow, for: .horizontal)
-            stack.addArrangedSubview(row)
-        }
     }
 
     /// 布局缩略图：走共用渲染器（原版风壁纸网格）
@@ -191,30 +164,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     // MARK: - 布局列表动作
 
-    @objc private func moveLayoutUp(_ sender: NSButton) {
-        var list = LayoutStore.layouts
-        let i = sender.tag
-        guard i > 0 else { return }
-        list.swapAt(i, i - 1)
-        LayoutStore.layouts = list
-        rebuildLayoutRows()
-    }
-
-    @objc private func moveLayoutDown(_ sender: NSButton) {
-        var list = LayoutStore.layouts
-        let i = sender.tag
-        guard i < list.count - 1 else { return }
-        list.swapAt(i, i + 1)
-        LayoutStore.layouts = list
-        rebuildLayoutRows()
-    }
-
-    @objc private func removeLayoutClicked(_ sender: NSButton) {
-        var list = LayoutStore.layouts
-        guard list.indices.contains(sender.tag) else { return }
-        list.remove(at: sender.tag)
-        LayoutStore.layouts = list
-        rebuildLayoutRows()
+    private func reloadLayouts() {
+        layoutTable.reloadData()
     }
 
     @objc private func addLayoutClicked() {
@@ -226,30 +177,39 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             var list = LayoutStore.layouts
             list.append(edited)
             LayoutStore.layouts = list
-            self?.rebuildLayoutRows()
+            self?.reloadLayouts()
         }
+    }
+
+    @objc private func removeSelectedLayout() {
+        let row = layoutTable.selectedRow
+        guard row >= 0, LayoutStore.layouts.indices.contains(row) else { return }
+        var list = LayoutStore.layouts
+        list.remove(at: row)
+        LayoutStore.layouts = list
+        reloadLayouts()
     }
 
     @objc private func resetLayoutsClicked() {
         LayoutStore.reset()
-        rebuildLayoutRows()
+        reloadLayouts()
     }
 
-    @objc private func editLayoutClicked(_ sender: NSButton) {
-        let index = sender.tag
-        guard LayoutStore.layouts.indices.contains(index) else { return }
-        let layout = LayoutStore.layouts[index]
+    @objc private func layoutRowDoubleClicked() {
+        let row = layoutTable.clickedRow >= 0 ? layoutTable.clickedRow : layoutTable.selectedRow
+        guard row >= 0, LayoutStore.layouts.indices.contains(row) else { return }
+        let layout = LayoutStore.layouts[row]
         LayoutEditorWindowController.present(layout: layout, isNew: false) { [weak self] edited in
             var list = LayoutStore.layouts
-            list[index] = edited
+            list[row] = edited
             LayoutStore.layouts = list
-            self?.rebuildLayoutRows()
+            self?.reloadLayouts()
         }
     }
 
     /// 页面容器 + 垂直布局栈（栈用单边约束，容器尺寸由窗口/tab 决定）
     private func makePage() -> (NSView, NSStackView) {
-        let content = NSView(frame: NSRect(x: 0, y: 0, width: 580, height: 590))
+        let content = NSView(frame: NSRect(x: 0, y: 0, width: 690, height: 590))
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -266,50 +226,75 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         return (content, stack)
     }
 
-    // MARK: - 行为页（原版 Options）
+    // MARK: - 行为页（原版 Options：标题在外、控件在圆角分组框内）
 
     private let optionHideRadio = NSButton(radioButtonWithTitle: "按住 ⌥ 隐藏布局图标", target: nil, action: nil)
     private let optionShowRadio = NSButton(radioButtonWithTitle: "按住 ⌥ 显示布局图标", target: nil, action: nil)
-    private let optionOffRadio = NSButton(radioButtonWithTitle: "不使用 ⌥ 键", target: nil, action: nil)
     private let statusIconCheck = NSButton(checkboxWithTitle: "显示菜单栏状态图标", target: nil, action: nil)
     private let namesCheck = NSButton(checkboxWithTitle: "在布局图标上显示名称", target: nil, action: nil)
     private let warnCheck = NSButton(checkboxWithTitle: "窗口未能调整尺寸时显示警告", target: nil, action: nil)
     private let animateCheck = NSButton(checkboxWithTitle: "吸附窗口动画（跨屏分阶段移动）", target: nil, action: nil)
     private let groupCheck = NSButton(checkboxWithTitle: "自动分组相邻互补布局", target: nil, action: nil)
+    private let bgWell = NSImageView(frame: NSRect(x: 0, y: 0, width: 220, height: 124))
+    private let bgDefaultButton = NSButton(title: "默认深色", target: nil, action: nil)
+    private let bgWallpaperButton = NSButton(title: "使用桌面壁纸", target: nil, action: nil)
+
+    /// 原版式分组框：小节标题在外，控件装进圆角框
+    private func groupBox(_ controls: [NSView], width: CGFloat = 660) -> NSView {
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 8
+        stack.edgeInsets = NSEdgeInsets(top: 10, left: 14, bottom: 10, right: 14)
+        for c in controls { stack.addArrangedSubview(c) }
+        let box = NSBox()
+        box.boxType = .primary
+        box.title = ""
+        box.contentView = stack
+        box.translatesAutoresizingMaskIntoConstraints = false
+        box.widthAnchor.constraint(equalToConstant: width).isActive = true
+        return box
+    }
 
     private func optionsTab() -> NSTabViewItem {
         let (content, stack) = makePage()
+        stack.spacing = 8
 
-        stack.addArrangedSubview(sectionTitle("功能"))
-        stack.addArrangedSubview(dragCheck)
-        stack.addArrangedSubview(hotkeyCheck)
-
-        stack.addArrangedSubview(sectionTitle("⌥ 键"))
-        for radio in [optionHideRadio, optionShowRadio, optionOffRadio] {
-            radio.target = self
-            radio.action = #selector(optionKeyModeChanged)
-            stack.addArrangedSubview(radio)
-        }
-
-        stack.addArrangedSubview(sectionTitle("显示"))
-        stack.addArrangedSubview(statusIconCheck)
-        stack.addArrangedSubview(namesCheck)
-        stack.addArrangedSubview(warnCheck)
-        stack.setCustomSpacing(16, after: warnCheck)
+        stack.addArrangedSubview(sectionTitle("行为"))
+        let behaviorIntro = captionText("⌥ 选项按钮用于控制布局图标的显示。")
+        optionHideRadio.target = self
+        optionHideRadio.action = #selector(optionKeyModeChanged)
+        optionShowRadio.target = self
+        optionShowRadio.action = #selector(optionKeyModeChanged)
+        stack.addArrangedSubview(groupBox([behaviorIntro, optionHideRadio, optionShowRadio,
+                                           statusIconCheck, groupCheck, namesCheck, warnCheck]))
 
         stack.addArrangedSubview(sectionTitle("窗口调整"))
-        stack.addArrangedSubview(animateCheck)
-        stack.addArrangedSubview(groupCheck)
-        stack.setCustomSpacing(16, after: groupCheck)
+        stack.addArrangedSubview(groupBox([animateCheck, dragCheck, hotkeyCheck]))
 
-        stack.addArrangedSubview(sectionTitle("图标条背景"))
-        let bgDefault = NSButton(title: "默认深色", target: self, action: #selector(bgDefaultClicked))
-        let bgWallpaper = NSButton(title: "使用桌面壁纸", target: self, action: #selector(bgWallpaperClicked))
-        let bgRow = NSStackView(views: [bgDefault, bgWallpaper])
-        bgRow.orientation = .horizontal
-        bgRow.spacing = 8
-        stack.addArrangedSubview(bgRow)
-        stack.setCustomSpacing(16, after: bgRow)
+        stack.addArrangedSubview(sectionTitle("背景"))
+        let bgIntro = captionText("布局图标条背景可使用默认深色或桌面壁纸。")
+        bgDefaultButton.target = self
+        bgDefaultButton.action = #selector(bgDefaultClicked)
+        bgWallpaperButton.target = self
+        bgWallpaperButton.action = #selector(bgWallpaperClicked)
+        let bgButtons = NSStackView(views: [bgDefaultButton, bgWallpaperButton])
+        bgButtons.orientation = .horizontal
+        bgButtons.spacing = 10
+        let bgInner = NSStackView()
+        bgInner.orientation = .vertical
+        bgInner.alignment = .leading
+        bgInner.spacing = 10
+        bgInner.addArrangedSubview(bgIntro)
+        bgWell.wantsLayer = true
+        bgWell.layer?.borderColor = NSColor.separatorColor.cgColor
+        bgWell.layer?.borderWidth = 1
+        bgWell.layer?.cornerRadius = 4
+        let wellRow = NSStackView(views: [bgWell, bgButtons])
+        wellRow.orientation = .horizontal
+        wellRow.spacing = 16
+        bgInner.addArrangedSubview(wellRow)
+        stack.addArrangedSubview(groupBox([bgInner]))
 
         let warnIcon = NSImageView(image: NSImage(systemSymbolName: "exclamationmark.triangle.fill",
                                                  accessibilityDescription: nil) ?? NSImage())
@@ -328,6 +313,26 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         item.label = "行为"
         item.view = content
         return item
+    }
+
+    /// 背景图井预览：默认渐变或桌面壁纸
+    private func refreshBackgroundWell() {
+        let img = NSImage(size: NSSize(width: 220, height: 124))
+        img.lockFocus()
+        if Prefs.stripBackground == 1,
+           let screen = NSScreen.main,
+           let url = NSWorkspace.shared.desktopImageURL(for: screen),
+           let wallpaper = NSImage(contentsOf: url) {
+            wallpaper.draw(in: NSRect(origin: .zero, size: img.size),
+                           from: NSRect(x: 0, y: 0, width: wallpaper.size.width, height: wallpaper.size.height / 2),
+                           operation: .copy, fraction: 1)
+        } else {
+            let grad = NSGradient(colors: [NSColor(red: 0.62, green: 0.78, blue: 0.94, alpha: 1),
+                                           NSColor(red: 0.22, green: 0.38, blue: 0.68, alpha: 1)])
+            grad?.draw(in: NSRect(origin: .zero, size: img.size), angle: 270)
+        }
+        img.unlockFocus()
+        bgWell.image = img
     }
 
     // MARK: - 定位页（原版 Positioning）
@@ -602,12 +607,13 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         // 行为页
         optionHideRadio.state = Prefs.optionKeyMode == 0 ? .on : .off
         optionShowRadio.state = Prefs.optionKeyMode == 1 ? .on : .off
-        optionOffRadio.state = Prefs.optionKeyMode == 2 ? .on : .off
+        if Prefs.optionKeyMode == 2 { optionHideRadio.state = .on }  // 两选一：不支持⌥时归入默认隐藏
         statusIconCheck.state = Prefs.showStatusIcon ? .on : .off
         namesCheck.state = Prefs.showLayoutNames ? .on : .off
         warnCheck.state = Prefs.warnOnFail ? .on : .off
         animateCheck.state = Prefs.animateWindows ? .on : .off
         groupCheck.state = Prefs.autoGroupLayouts ? .on : .off
+        refreshBackgroundWell()
 
         // 定位页
         orientHoriRadio.state = Prefs.stripVertical ? .off : .on
@@ -657,7 +663,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     @objc private func optionKeyModeChanged() {
         if optionHideRadio.state == .on { Prefs.optionKeyMode = 0 }
         else if optionShowRadio.state == .on { Prefs.optionKeyMode = 1 }
-        else if optionOffRadio.state == .on { Prefs.optionKeyMode = 2 }
     }
 
     @objc private func statusIconChanged() { Prefs.showStatusIcon = statusIconCheck.state == .on }
@@ -807,24 +812,15 @@ final class ScreenPositionPreviewView: NSView {
             }
 
         case .quickLayout:
+            // 原版 Quick Layout：呼出的是「一个布局图标」（壁纸网格风）
             let w = CGFloat(Prefs.qlWidth) * k
             let h = CGFloat(Prefs.qlHeight) * k
             let x = screen.minX + CGFloat(Prefs.qlPosX) * max(0, screen.width - w)
             let y = screen.maxY - CGFloat(Prefs.qlPosY) * max(0, screen.height - h) - h
-            let block = NSRect(x: x, y: y, width: w, height: h)
-            let blockPath = NSBezierPath(roundedRect: block, xRadius: 6, yRadius: 6)
-            NSColor.controlAccentColor.withAlphaComponent(0.55).setFill()
-            blockPath.fill()
-            NSColor.white.withAlphaComponent(0.8).setStroke()
-            blockPath.lineWidth = 1.5
-            blockPath.stroke()
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: 10, weight: .medium),
-                .foregroundColor: NSColor.white.withAlphaComponent(0.95),
-            ]
-            let text = NSAttributedString(string: "快速布局", attributes: attrs)
-            let size = text.size()
-            text.draw(at: CGPoint(x: block.midX - size.width / 2, y: block.midY - size.height / 2))
+            let iconRect = NSRect(x: x, y: y, width: w, height: h)
+            let layout = LayoutStore.displayLayouts(for: nil).first
+                ?? TidyLayout.builtins[0]
+            LayoutIconRenderer.draw(layout: layout, in: iconRect, flipped: false)
         }
     }
 }
@@ -901,8 +897,15 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
     private let isNew: Bool
     private let onCommit: (TidyLayout) -> Void
 
+    /// 关键：编辑器控制器必须静态持有到窗口关闭。
+    /// 此前 present() 里是局部变量，方法返回后控制器即被释放——
+    /// 窗口还显示着（NSWindow 由 AppKit 窗口列表持有），但所有控件的
+    /// target 已是死指针，表现为「弹窗能打开却完全操作不了」。
+    private static var active: LayoutEditorWindowController?
+
     static func present(layout: TidyLayout, isNew: Bool, onCommit: @escaping (TidyLayout) -> Void) {
         let editor = LayoutEditorWindowController(layout: layout, isNew: isNew, onCommit: onCommit)
+        LayoutEditorWindowController.active = editor
         editor.window.center()
         editor.window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -1117,7 +1120,89 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
         window.close()
     }
 
+    func windowWillClose(_ notification: Notification) {
+        if LayoutEditorWindowController.active === self {
+            LayoutEditorWindowController.active = nil
+        }
+    }
+
     func controlTextDidChange(_ obj: Notification) {
         updatePreview()
+    }
+}
+
+// MARK: - 布局列表表格（拖拽排序 / 双击编辑）
+
+extension SettingsWindowController {
+    func numberOfRows(in tableView: NSTableView) -> Int {
+        LayoutStore.layouts.count
+    }
+
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        guard LayoutStore.layouts.indices.contains(row) else { return nil }
+        let layout = LayoutStore.layouts[row]
+        let cell = NSView()
+
+        let thumb = NSImageView(image: Self.thumbnail(for: layout, size: NSSize(width: 150, height: 84)))
+        thumb.frame = NSRect(x: 12, y: 6, width: 150, height: 84)
+        cell.addSubview(thumb)
+
+        let name = NSTextField(labelWithString: layout.name)
+        name.font = .systemFont(ofSize: 14, weight: .semibold)
+        name.frame = NSRect(x: 178, y: 64, width: 400, height: 20)
+        cell.addSubview(name)
+
+        let desc: String
+        if let first = layout.regions.first {
+            desc = layout.regions.count == 1
+                ? "\(layout.cols) × \(layout.rows) 网格，从 (\(first.x1), \(first.y1)) 到 (\(first.x2), \(first.y2))"
+                : "\(layout.cols) × \(layout.rows) 网格，\(layout.regions.count) 个区域"
+        } else {
+            desc = "\(layout.cols) × \(layout.rows) 网格"
+        }
+        let descLabel = NSTextField(labelWithString: desc)
+        descLabel.font = .systemFont(ofSize: 12)
+        descLabel.textColor = .secondaryLabelColor
+        descLabel.frame = NSRect(x: 178, y: 40, width: 440, height: 16)
+        cell.addSubview(descLabel)
+
+        let scopeLabel = NSTextField(labelWithString: layout.scope == -1 ? "所有屏幕" : "仅指定显示器")
+        scopeLabel.font = .systemFont(ofSize: 11)
+        scopeLabel.textColor = .tertiaryLabelColor
+        scopeLabel.frame = NSRect(x: 178, y: 20, width: 300, height: 14)
+        cell.addSubview(scopeLabel)
+
+        return cell
+    }
+
+    // MARK: 拖拽排序
+
+    func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int) -> NSPasteboardWriting? {
+        let item = NSPasteboardItem()
+        item.setString(String(row), forType: Self.layoutDragType)
+        return item
+    }
+
+    func tableView(_ tableView: NSTableView, validateDrop info: NSDraggingInfo,
+                   proposedRow row: Int, proposedDropOperation dropOperation: NSTableView.DropOperation) -> NSDragOperation {
+        guard dropOperation == .above,
+              info.draggingPasteboard.types?.contains(Self.layoutDragType) == true else { return [] }
+        return .move
+    }
+
+    func tableView(_ tableView: NSTableView, acceptDrop info: NSDraggingInfo,
+                   row: Int, dropOperation: NSTableView.DropOperation) -> Bool {
+        guard let srcString = info.draggingPasteboard.string(forType: Self.layoutDragType),
+              let src = Int(srcString),
+              LayoutStore.layouts.indices.contains(src) else { return false }
+
+        var list = LayoutStore.layouts
+        let item = list.remove(at: src)
+        let dst = min(max(row > src ? row - 1 : row, 0), list.count)
+        list.insert(item, at: dst)
+        LayoutStore.layouts = list
+        tableView.reloadData()
+        tableView.selectRowIndexes(IndexSet(integer: dst), byExtendingSelection: false)
+        return true
     }
 }

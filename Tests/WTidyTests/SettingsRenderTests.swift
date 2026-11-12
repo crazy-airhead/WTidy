@@ -48,13 +48,15 @@ struct SettingsRenderTests {
         #expect(stack.frame.width > 150, "栈宽应 > 150，实际 \(stack.frame.width)")
         #expect(stack.frame.height > 200, "栈高应 > 200（塌陷则失败），实际 \(stack.frame.height)")
 
-        // 3) 通用页第一个复选框应在栈顶部（转换到页面坐标后靠近页面顶端）
-        guard let firstCheck = stack.arrangedSubviews.first(where: { $0 is NSButton }) else {
-            Issue.record("找不到功能开关")
-            return
+        // 3) 行为页：第一个分组框应靠页面顶部，框内应含功能开关
+        let boxes = stack.arrangedSubviews.compactMap { $0 as? NSBox }
+        #expect(boxes.count == 3, "行为页应有 3 个分组框（行为/窗口调整/背景），实际 \(boxes.count)")
+        if let firstBox = boxes.first {
+            let f = general.convert(firstBox.frame, from: stack)
+            #expect(f.maxY > general.bounds.height * 0.7, "第一个分组框应靠页面顶部，实际 \(f)")
+            let inner = (firstBox.contentView as? NSStackView)?.arrangedSubviews.filter { $0 is NSButton } ?? []
+            #expect(inner.count >= 2, "行为分组框内应含 ⌥ 单选等开关，实际 \(inner.count) 个按钮")
         }
-        let inGeneral = general.convert(firstCheck.frame, from: stack)
-        #expect(inGeneral.maxY > general.bounds.height * 0.8, "功能开关应靠页面顶部，实际 \(inGeneral)")
 
         // 4) 快捷键页应有 12 行且不塌陷（需先选中该 tab 才会布局）
         tab.selectTabViewItem(at: 4)
