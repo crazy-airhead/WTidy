@@ -94,7 +94,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     private static let layoutDragType = NSPasteboard.PasteboardType("com.allblue.wtidy.layoutrow")
 
     private func layoutsTab() -> NSTabViewItem {
-        let (content, stack) = makePage()
+        let (scroll, stack) = makePage()
         stack.spacing = 8
 
         let caption = captionText(L("拖动可更改布局顺序，双击编辑；双击后可在编辑器里为布局录制专属激活快捷键。固定方向快捷键（⌥⌘←/→ 等）始终可用。"))
@@ -150,7 +150,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
 
         let item = NSTabViewItem(identifier: "layouts")
         item.label = L("布局")
-        item.view = content
+        item.view = scroll
         return item
     }
 
@@ -212,22 +212,27 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     }
 
     /// 页面容器 + 垂直布局栈（栈用单边约束，容器尺寸由窗口/tab 决定）
-    private func makePage() -> (NSView, NSStackView) {
-        let content = NSView(frame: NSRect(x: 0, y: 0, width: 690, height: 680))
+    // 页面容器：滚动视图包裹垂直布局栈。
+    // 内容再长也只是滚动，不会被压缩裁切（此前分组框被裁掉最后一项即此因）。
+    private func makePage() -> (NSScrollView, NSStackView) {
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 10
         stack.edgeInsets = NSEdgeInsets(top: 18, left: 24, bottom: 18, right: 24)
         stack.translatesAutoresizingMaskIntoConstraints = false
-        content.addSubview(stack)
+
+        let scroll = NSScrollView()
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.drawsBackground = false
+        scroll.documentView = stack
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: content.topAnchor),
-            stack.leadingAnchor.constraint(equalTo: content.leadingAnchor),
-            stack.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor),
-            stack.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor),
+            stack.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
+            stack.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
+            stack.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
         ])
-        return (content, stack)
+        return (scroll, stack)
     }
 
     // MARK: - 行为页（原版 Options：标题在外、控件在圆角分组框内）
@@ -265,7 +270,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     }
 
     private func optionsTab() -> NSTabViewItem {
-        let (content, stack) = makePage()
+        let (scroll, stack) = makePage()
         stack.spacing = 8
 
         stack.addArrangedSubview(sectionTitle(L("行为")))
@@ -322,7 +327,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
 
         let item = NSTabViewItem(identifier: "options")
         item.label = L("行为")
-        item.view = content
+        item.view = scroll
         return item
     }
 
@@ -359,7 +364,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     private let marginField = NSTextField(string: "0")
 
     private func positioningTab() -> NSTabViewItem {
-        let (content, stack) = makePage()
+        let (scroll, stack) = makePage()
 
         func label(_ t: String) -> NSTextField {
             let f = NSTextField(labelWithString: t)
@@ -425,7 +430,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
 
         let item = NSTabViewItem(identifier: "positioning")
         item.label = L("定位")
-        item.view = content
+        item.view = scroll
         return item
     }
 

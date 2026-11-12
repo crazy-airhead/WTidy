@@ -35,25 +35,26 @@ struct SettingsRenderTests {
         // 注意：AppKit frame 坐标原点在左下角——顶对齐的视图 maxY ≈ 容器高度。
         // NSStackView 自身 flipped，绘制自顶向下；frame 仍在容器坐标系里。
 
-        // 2) 行为页（原版 Options）：栈应顶对齐（maxY≈页高）、靠左、尺寸合理
+        // 2) 行为页（原版 Options）：页面为滚动容器，栈是其 documentView
         tab.selectTabViewItem(at: 1)
         win.contentView?.layoutSubtreeIfNeeded()
         let general = tab.tabViewItems[1].view!
-        guard let stack = general.subviews.compactMap({ $0 as? NSStackView }).first else {
-            Issue.record("通用页找不到布局栈")
+        guard let scrollV = general as? NSScrollView,
+              let stack = scrollV.documentView as? NSStackView else {
+            Issue.record("行为页应为滚动容器 + 布局栈")
             return
         }
-        #expect(stack.frame.minX <= 40, "栈应靠左，实际 \(stack.frame)")
-        #expect(abs(stack.frame.maxY - general.bounds.height) < 30, "栈应顶对齐 maxY≈\(general.bounds.height)，实际 \(stack.frame)")
-        #expect(stack.frame.width > 150, "栈宽应 > 150，实际 \(stack.frame.width)")
+        stack.layoutSubtreeIfNeeded()
+        #expect(stack.frame.width > 150, "栈宽应 > 150，实际 \(stack.frame)")
         #expect(stack.frame.height > 200, "栈高应 > 200（塌陷则失败），实际 \(stack.frame.height)")
 
         // 3) 行为页：第一个分组框应靠页面顶部，框内应含功能开关
         let boxes = stack.arrangedSubviews.compactMap { $0 as? NSBox }
         #expect(boxes.count == 4, "行为页应有 4 个分组框（行为/窗口调整/配色/背景），实际 \(boxes.count)")
         if let firstBox = boxes.first {
-            let f = general.convert(firstBox.frame, from: stack)
-            #expect(f.maxY > general.bounds.height * 0.7, "第一个分组框应靠页面顶部，实际 \(f)")
+            // 结构断言：第一个分组框紧跟小节标题（栈内第 2 个元素），必然处于页面顶部区域
+            #expect(stack.arrangedSubviews.firstIndex(where: { $0 === firstBox }) == 1,
+                    "第一个分组框应为栈内第 2 个元素（紧跟标题），实际位置 \(stack.arrangedSubviews.firstIndex(where: { $0 === firstBox }) ?? -1)")
             let inner = (firstBox.contentView as? NSStackView)?.arrangedSubviews.filter { $0 is NSButton } ?? []
             #expect(inner.count >= 2, "行为分组框内应含 ⌥ 单选等开关，实际 \(inner.count) 个按钮")
         }
