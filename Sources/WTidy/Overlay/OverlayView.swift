@@ -1,20 +1,25 @@
 import AppKit
 
 /// 拖拽图标条 / 快速布局面板的配色主题（行为页「图标条配色」可选）
+/// .tidy = 对齐原版 Window Tidy：蓝色壁纸底 + 深蓝灰区域块 + 亮蓝描边（默认）
 enum StripTheme {
-    case ink       // 墨蓝：深藏青底 + 雾蓝块（默认，替代纯白）
-    case graphite  // 石墨：炭灰底 + 银灰块
-    case teal      // 青碧：深青底 + 青碧块
-    case violet    // 紫罗兰：深紫底 + 淡紫块
+    case tidy       // 原版蓝
+    case ink        // 墨蓝
+    case graphite   // 石墨
+    case teal       // 青碧
+    case violet     // 紫罗兰
 
     static func at(_ index: Int) -> StripTheme {
-        [StripTheme.ink, .graphite, .teal, .violet][max(0, min(3, index))]
+        [StripTheme.tidy, .ink, .graphite, .teal, .violet][max(0, min(4, index))]
     }
 
     var bgColors: [NSColor] {
         switch self {
+        case .tidy:    return [NSColor(red: 0.56, green: 0.71, blue: 0.90, alpha: 1),
+                               NSColor(red: 0.36, green: 0.55, blue: 0.84, alpha: 1),
+                               NSColor(red: 0.25, green: 0.42, blue: 0.72, alpha: 1)]
         case .ink:     return [NSColor(red: 0.13, green: 0.17, blue: 0.26, alpha: 1),
-                              NSColor(red: 0.09, green: 0.12, blue: 0.19, alpha: 1)]
+                               NSColor(red: 0.09, green: 0.12, blue: 0.19, alpha: 1)]
         case .graphite: return [NSColor(red: 0.18, green: 0.18, blue: 0.19, alpha: 1),
                                 NSColor(red: 0.11, green: 0.11, blue: 0.12, alpha: 1)]
         case .teal:    return [NSColor(red: 0.05, green: 0.17, blue: 0.19, alpha: 1),
@@ -26,6 +31,7 @@ enum StripTheme {
 
     var cellFill: NSColor {
         switch self {
+        case .tidy:    return NSColor(red: 0.16, green: 0.21, blue: 0.30, alpha: 0.88)
         case .ink:     return NSColor(red: 0.44, green: 0.65, blue: 0.94, alpha: 0.92)
         case .graphite: return NSColor(red: 0.82, green: 0.82, blue: 0.84, alpha: 0.88)
         case .teal:    return NSColor(red: 0.25, green: 0.78, blue: 0.74, alpha: 0.92)
@@ -34,16 +40,28 @@ enum StripTheme {
     }
 
     var cellStroke: NSColor {
-        NSColor.white.withAlphaComponent(0.30)
+        switch self {
+        case .tidy:    return NSColor(red: 0.55, green: 0.75, blue: 0.95, alpha: 0.80)
+        default:       return NSColor.white.withAlphaComponent(0.30)
+        }
     }
 
     /// 悬停投影命中的区域块（更亮，用于「拖到这里了」的即时反馈）
     var activeCellFill: NSColor {
         switch self {
+        case .tidy:    return NSColor(red: 0.28, green: 0.38, blue: 0.52, alpha: 0.95)
         case .ink:     return NSColor(red: 0.62, green: 0.80, blue: 1.00, alpha: 1)
         case .graphite: return NSColor(red: 1.00, green: 1.00, blue: 1.00, alpha: 1)
         case .teal:    return NSColor(red: 0.55, green: 0.95, blue: 0.90, alpha: 1)
         case .violet:  return NSColor(red: 0.85, green: 0.72, blue: 1.00, alpha: 1)
+        }
+    }
+
+    /// 选中区域的描边（原版：亮青蓝发光感）
+    var activeCellStroke: NSColor {
+        switch self {
+        case .tidy:    return NSColor(red: 0.65, green: 0.88, blue: 1.00, alpha: 1)
+        default:       return NSColor.white.withAlphaComponent(0.55)
         }
     }
 }
@@ -242,7 +260,7 @@ enum LayoutIconRenderer {
             case .dark:
                 if ri == activeRegion {
                     theme.activeCellFill.setFill()
-                    NSColor.white.withAlphaComponent(0.55).setStroke()
+                    theme.activeCellStroke.setStroke()
                 } else {
                     theme.cellFill.setFill()
                     theme.cellStroke.setStroke()

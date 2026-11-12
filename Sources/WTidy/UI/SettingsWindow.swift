@@ -242,6 +242,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     private let warnCheck = NSButton(checkboxWithTitle: "窗口未能调整尺寸时显示警告", target: nil, action: nil)
     private let animateCheck = NSButton(checkboxWithTitle: "吸附窗口动画（跨屏分阶段移动）", target: nil, action: nil)
     private let groupCheck = NSButton(checkboxWithTitle: "自动分组相邻互补布局", target: nil, action: nil)
+    private let themeTidyRadio = NSButton(radioButtonWithTitle: "原版蓝", target: nil, action: nil)
     private let themeInkRadio = NSButton(radioButtonWithTitle: "墨蓝", target: nil, action: nil)
     private let themeGraphiteRadio = NSButton(radioButtonWithTitle: "石墨", target: nil, action: nil)
     private let themeTealRadio = NSButton(radioButtonWithTitle: "青碧", target: nil, action: nil)
@@ -284,7 +285,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         stack.addArrangedSubview(groupBox([animateCheck, groupCheck, dragCheck, hotkeyCheck]))
 
         stack.addArrangedSubview(sectionTitle("图标条配色"))
-        stack.addArrangedSubview(groupBox([themeInkRadio, themeGraphiteRadio, themeTealRadio, themeVioletRadio]))
+        stack.addArrangedSubview(groupBox([themeTidyRadio, themeInkRadio, themeGraphiteRadio, themeTealRadio, themeVioletRadio]))
 
         stack.addArrangedSubview(sectionTitle("背景"))
         let bgIntro = captionText("布局图标条背景可使用默认深色或桌面壁纸。")
@@ -599,7 +600,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         animateCheck.action = #selector(animateChanged)
         groupCheck.target = self
         groupCheck.action = #selector(groupChanged)
-        for radio in [themeInkRadio, themeGraphiteRadio, themeTealRadio, themeVioletRadio] {
+        for radio in [themeTidyRadio, themeInkRadio, themeGraphiteRadio, themeTealRadio, themeVioletRadio] {
             radio.target = self
             radio.action = #selector(stripThemeChanged)
         }
@@ -634,10 +635,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         warnCheck.state = Prefs.warnOnFail ? .on : .off
         animateCheck.state = Prefs.animateWindows ? .on : .off
         groupCheck.state = Prefs.autoGroupLayouts ? .on : .off
-        themeInkRadio.state = Prefs.stripTheme == 0 ? .on : .off
-        themeGraphiteRadio.state = Prefs.stripTheme == 1 ? .on : .off
-        themeTealRadio.state = Prefs.stripTheme == 2 ? .on : .off
-        themeVioletRadio.state = Prefs.stripTheme == 3 ? .on : .off
+        themeTidyRadio.state = Prefs.stripTheme == 0 ? .on : .off
+        themeInkRadio.state = Prefs.stripTheme == 1 ? .on : .off
+        themeGraphiteRadio.state = Prefs.stripTheme == 2 ? .on : .off
+        themeTealRadio.state = Prefs.stripTheme == 3 ? .on : .off
+        themeVioletRadio.state = Prefs.stripTheme == 4 ? .on : .off
         refreshBackgroundWell()
 
         // 定位页
@@ -699,10 +701,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     @objc private func animateChanged() { Prefs.animateWindows = animateCheck.state == .on }
     @objc private func groupChanged() { Prefs.autoGroupLayouts = groupCheck.state == .on }
     @objc private func stripThemeChanged() {
-        if themeInkRadio.state == .on { Prefs.stripTheme = 0 }
-        else if themeGraphiteRadio.state == .on { Prefs.stripTheme = 1 }
-        else if themeTealRadio.state == .on { Prefs.stripTheme = 2 }
-        else if themeVioletRadio.state == .on { Prefs.stripTheme = 3 }
+        if themeTidyRadio.state == .on { Prefs.stripTheme = 0 }
+        else if themeInkRadio.state == .on { Prefs.stripTheme = 1 }
+        else if themeGraphiteRadio.state == .on { Prefs.stripTheme = 2 }
+        else if themeTealRadio.state == .on { Prefs.stripTheme = 3 }
+        else if themeVioletRadio.state == .on { Prefs.stripTheme = 4 }
         refreshBackgroundWell()
     }
     @objc private func bgDefaultClicked() { Prefs.stripBackground = 0 }

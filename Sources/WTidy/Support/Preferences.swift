@@ -163,11 +163,11 @@ enum Prefs {
         set { set(newValue, forKey: Keys.autoGroupLayouts) }
     }
 
-    /// 图标条配色主题：0=墨蓝 1=石墨 2=青碧 3=紫罗兰
+    /// 图标条配色主题：0=原版蓝 1=墨蓝 2=石墨 3=青碧 4=紫罗兰
     static var stripTheme: Int {
         get {
             let v = defaults.object(forKey: Keys.stripTheme) == nil ? 0 : defaults.integer(forKey: Keys.stripTheme)
-            return min(max(v, 0), 3)
+            return min(max(v, 0), 4)
         }
         set { set(newValue, forKey: Keys.stripTheme) }
     }
