@@ -25,6 +25,8 @@ final class StatusMenuController: NSObject {
     private let layoutSubmenu = NSMenuItem(title: L("应用布局到前台窗口"), action: nil, keyEquivalent: "")
     private let restoreAllItem = NSMenuItem(title: L("恢复所有窗口位置"), action: nil, keyEquivalent: "")
     private let moveToDisplayItem = NSMenuItem(title: L("发送窗口到另一块屏幕"), action: nil, keyEquivalent: "")
+    private let languageSubmenu = NSMenuItem(title: L("语言"), action: nil, keyEquivalent: "")
+    private let appearanceSubmenu = NSMenuItem(title: L("外观"), action: nil, keyEquivalent: "")
     /// attract 脉冲（对齐原版 attractState）：缺权限时图标闪烁引起注意
     private var attractTimer: Timer?
 
@@ -52,6 +54,15 @@ final class StatusMenuController: NSObject {
         moveToDisplayItem.target = self
         moveToDisplayItem.action = #selector(moveToDisplayClicked)
         menu.addItem(moveToDisplayItem)
+        menu.addItem(.separator())
+
+        // 语言 / 外观切换子菜单
+        languageSubmenu.submenu = NSMenu()
+        languageSubmenu.submenu?.delegate = self
+        menu.addItem(languageSubmenu)
+        appearanceSubmenu.submenu = NSMenu()
+        appearanceSubmenu.submenu?.delegate = self
+        menu.addItem(appearanceSubmenu)
         menu.addItem(.separator())
 
         let settingsItem = NSMenuItem(title: L("设置…"), action: #selector(openSettings), keyEquivalent: ",")
@@ -175,7 +186,67 @@ extension StatusMenuController: NSMenuDelegate {
             rebuildLayoutSubmenu(menu)
             return
         }
+        if menu === languageSubmenu.submenu {
+            rebuildLanguageSubmenu(menu)
+            return
+        }
+        if menu === appearanceSubmenu.submenu {
+            rebuildAppearanceSubmenu(menu)
+            return
+        }
         update(state: currentRenderState)
+    }
+
+    // 语言子菜单：跟随系统 / 简体中文 / English
+    private func rebuildLanguageSubmenu(_ menu: NSMenu) {
+        menu.removeAllItems()
+        let items: [(String, AppearancePrefs.Language)] = [
+            (L("跟随系统"), .system),
+            ("简体中文", .zhHans),
+            ("English", .en),
+        ]
+        for (title, lang) in items {
+            let item = NSMenuItem(title: title, action: #selector(languageClicked(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = lang.rawValue
+            item.state = AppearancePrefs.language == lang ? .on : .off
+            menu.addItem(item)
+        }
+        menu.addItem(.separator())
+        let note = NSMenuItem(title: L("切换语言后需重启 WTidy 生效"), action: nil, keyEquivalent: "")
+        note.isEnabled = false
+        menu.addItem(note)
+    }
+
+    // 外观子菜单：跟随系统 / 浅色 / 深色（即时生效）
+    private func rebuildAppearanceSubmenu(_ menu: NSMenu) {
+        menu.removeAllItems()
+        let items: [(String, AppearancePrefs.Appearance)] = [
+            (L("跟随系统"), .system),
+            (L("浅色"), .light),
+            (L("深色"), .dark),
+        ]
+        for (title, mode) in items {
+            let item = NSMenuItem(title: title, action: #selector(appearanceClicked(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = mode.rawValue
+            item.state = AppearancePrefs.appearance == mode ? .on : .off
+            menu.addItem(item)
+        }
+    }
+
+    @objc private func languageClicked(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let lang = AppearancePrefs.Language(rawValue: raw) else { return }
+        AppearancePrefs.language = lang
+        AppLog.info("语言切换 → \(lang.rawValue)（重启后全面生效）")
+    }
+
+    @objc private func appearanceClicked(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let mode = AppearancePrefs.Appearance(rawValue: raw) else { return }
+        AppearancePrefs.appearance = mode
+        AppLog.info("外观切换 → \(mode.rawValue)")
     }
 
     /// 布局子菜单：每次打开重建（对齐原版 Apply Layout，作用于最前窗口）

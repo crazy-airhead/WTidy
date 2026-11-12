@@ -97,6 +97,13 @@
 "新布局" = "New Layout";
 "行为" = "Behavior";
 "发送窗口到另一块屏幕" = "Send Window to Another Display";
+"语言" = "Language";
+"外观" = "Appearance";
+"跟随系统" = "Follow System";
+"浅色" = "Light";
+"深色" = "Dark";
+"切换语言后需重启 WTidy 生效" = "Restart WTidy to fully apply language change";
+"没有其他显示器可发送" = "No other display to send to";
 "没有其他显示器可发送" = "No other display to send to";
 "应用布局到前台窗口" = "Apply Layout to Frontmost Window";
 "右 1/3" = "Right 1/3";
