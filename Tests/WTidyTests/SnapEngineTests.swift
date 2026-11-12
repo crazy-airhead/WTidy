@@ -9,9 +9,13 @@ private func close(_ a: CGFloat, _ b: CGFloat, eps: CGFloat = 0.001) -> Bool {
     abs(a - b) < eps
 }
 
-// 套件内测试共享 LayoutStore 全局状态，必须串行执行
+// 套件内测试共享 LayoutStore 全局状态，必须串行执行；
+// 且测试进程的 UserDefaults 会跨运行持久化——每个测试前重置为内置布局
 @Suite(.serialized)
 struct SnapEngineTests {
+    init() {
+        LayoutStore.reset()
+    }
     // 模拟屏：1920×1080，可见区去掉顶部 25pt 菜单栏
     let visible = CGRect(x: 0, y: 0, width: 1920, height: 1055)
 
@@ -76,17 +80,26 @@ struct SnapEngineTests {
         #expect(close(zones[3].maxX, visible.maxX))
     }
 
-    @Test func twoThirdsSingleRegion() {
-        let left = LayoutStore.layout(id: "twoThirdsLeft")!
-        let zonesL = SnapEngine.zoneRects(for: left, in: visible)
-        #expect(zonesL.count == 1)
-        #expect(close(zonesL[0].width, 1280, eps: 0.5))
+    @Test func twoThirdsSplitLayouts() {
+        // 左 1/3 + 右 2/3：两个区域，宽度 640 / 1280
+        let narrowWide = LayoutStore.layout(id: "narrowWide")!
+        let zonesNW = SnapEngine.zoneRects(for: narrowWide, in: visible)
+        #expect(zonesNW.count == 2)
+        #expect(close(zonesNW[0].width, 640))
+        #expect(close(zonesNW[1].width, 1280, eps: 0.5))
+        #expect(close(zonesNW[1].maxX, visible.maxX))
 
-        let right = LayoutStore.layout(id: "twoThirdsRight")!
-        let zonesR = SnapEngine.zoneRects(for: right, in: visible)
-        #expect(zonesR.count == 1)
-        #expect(close(zonesR[0].width, 1280, eps: 0.5))
-        #expect(close(zonesR[0].maxX, visible.maxX))
+        // 左 2/3 + 右 1/3
+        let wideNarrow = LayoutStore.layout(id: "wideNarrow")!
+        let zonesWN = SnapEngine.zoneRects(for: wideNarrow, in: visible)
+        #expect(zonesWN.count == 2)
+        #expect(close(zonesWN[0].width, 1280, eps: 0.5))
+        #expect(close(zonesWN[1].width, 640))
+        #expect(close(zonesWN[1].maxX, visible.maxX))
+
+        // 投影：窄宽图标瞄左=左1/3、瞄右=右2/3
+        #expect(SnapEngine.zoneIndexInIcon(nx: 0.1, ny: 0.5, layout: narrowWide) == 0)
+        #expect(SnapEngine.zoneIndexInIcon(nx: 0.9, ny: 0.5, layout: narrowWide) == 1)
     }
 
     @Test func centerRegionMatchesOriginal() {
@@ -185,8 +198,10 @@ struct SnapEngineTests {
     @Test func layoutAndZoneMapping() {
         #expect(OverlayController.layoutAndZone(for: .leftHalf)?.1 == 0)
         #expect(OverlayController.layoutAndZone(for: .rightHalf)?.0.id == "halves")
-        #expect(OverlayController.layoutAndZone(for: .twoThirdsRight)?.0.id == "twoThirdsRight")
-        #expect(OverlayController.layoutAndZone(for: .twoThirdsRight)?.1 == 0)
+        #expect(OverlayController.layoutAndZone(for: .twoThirdsLeft)?.0.id == "wideNarrow")
+        #expect(OverlayController.layoutAndZone(for: .twoThirdsLeft)?.1 == 0)
+        #expect(OverlayController.layoutAndZone(for: .twoThirdsRight)?.0.id == "wideNarrow")
+        #expect(OverlayController.layoutAndZone(for: .twoThirdsRight)?.1 == 1)
         #expect(OverlayController.layoutAndZone(for: .center) == nil)
         #expect(OverlayController.layoutAndZone(for: .restore) == nil)
     }
@@ -205,10 +220,10 @@ struct SnapEngineTests {
         #expect(merged.regions.count == 2)
         #expect(merged.normalizedRects.count == 2)
 
-        // 左2/3 + 右2/3 区域重叠（单元 2）→ 不可合并
-        let t32l = TidyLayout.builtins.first { $0.id == "twoThirdsLeft" }!
-        let t32r = TidyLayout.builtins.first { $0.id == "twoThirdsRight" }!
-        #expect(!TidyLayout.groupable(t32l, t32r))
+        // 窄宽 + 宽窄 区域互相重叠 → 不可合并
+        let narrowWide = TidyLayout.builtins.first { $0.id == "narrowWide" }!
+        let wideNarrow = TidyLayout.builtins.first { $0.id == "wideNarrow" }!
+        #expect(!TidyLayout.groupable(narrowWide, wideNarrow))
 
         // 作用域不同 → 不可合并
         var scopedRight = right

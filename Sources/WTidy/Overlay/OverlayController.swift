@@ -389,8 +389,8 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
         case .leftThird: guard let x = l("thirds") else { return nil }; return (x, 0)
         case .middleThird: guard let x = l("thirds") else { return nil }; return (x, 1)
         case .rightThird: guard let x = l("thirds") else { return nil }; return (x, 2)
-        case .twoThirdsLeft: guard let x = l("twoThirdsLeft") else { return nil }; return (x, 0)
-        case .twoThirdsRight: guard let x = l("twoThirdsRight") else { return nil }; return (x, 0)
+        case .twoThirdsLeft: guard let x = l("wideNarrow") else { return nil }; return (x, 0)
+        case .twoThirdsRight: guard let x = l("wideNarrow") else { return nil }; return (x, 1)
         case .maximize: guard let x = l("full") else { return nil }; return (x, 0)
         case .center, .restore: return nil
         }
@@ -405,10 +405,10 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
         case ("thirds", 0): return "左 1/3"
         case ("thirds", 1): return "中 1/3"
         case ("thirds", 2): return "右 1/3"
-        case ("leftThird", _): return "左 1/3"
-        case ("rightThird", _): return "右 1/3"
-        case ("twoThirdsLeft", _): return "左 2/3"
-        case ("twoThirdsRight", _): return "右 2/3"
+        case ("narrowWide", 0): return "左 1/3"
+        case ("narrowWide", 1): return "右 2/3"
+        case ("wideNarrow", 0): return "左 2/3"
+        case ("wideNarrow", 1): return "右 1/3"
         case ("quarters", 0): return "左上 1/4"
         case ("quarters", 1): return "右上 1/4"
         case ("quarters", 2): return "左下 1/4"

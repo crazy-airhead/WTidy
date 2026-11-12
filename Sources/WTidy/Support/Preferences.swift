@@ -99,11 +99,13 @@ enum Prefs {
         set { set(min(max(newValue, 0), 1), forKey: Keys.stripPosY) }
     }
 
-    /// 整条最大宽度（默认 640：8 个布局时单图标 ~68pt，对齐原版拖拽条观感）
+    /// 整条最大宽度（默认 720）。历史遗留：用户手输过的旧值 512 一次性迁移为 720
+    /// （8 个布局 × 76pt 基准 + 间距 ≈ 720，对齐原版观感）
     static var stripMaxWidth: Double {
         get {
-            let v = defaults.object(forKey: Keys.stripMaxWidth) == nil ? 640 : defaults.double(forKey: Keys.stripMaxWidth)
-            return min(max(v, 200), 1600)
+            if defaults.object(forKey: Keys.stripMaxWidth) == nil { return 720 }
+            let v = defaults.double(forKey: Keys.stripMaxWidth)
+            return min(max(v == 512 ? 720 : v, 200), 1600)
         }
         set { set(min(max(newValue, 200), 1600), forKey: Keys.stripMaxWidth) }
     }

@@ -105,18 +105,17 @@ struct TidyLayout: Codable, Equatable {
                    scope: a.scope)
     }
 
-    /// 内置布局（顺序即图标条顺序；id 稳定，快捷键依赖它）
+    /// 内置布局（顺序即图标条顺序；id 稳定，快捷键依赖它）。
+    /// 共 8 个：一个布局 = 一套完整分区方案（窄宽/宽窄是各自含两个区域的双区布局）。
     static let builtins: [TidyLayout] = [
-        .init(id: "halves",         name: "左右半屏", cols: 2, rows: 1, regions: [.init(1, 1, 1, 1), .init(2, 1, 2, 1)]),
-        .init(id: "vertical",       name: "上下半屏", cols: 1, rows: 2, regions: [.init(1, 1, 1, 1), .init(1, 2, 1, 2)]),
-        .init(id: "thirds",         name: "三等分",   cols: 3, rows: 1, regions: [.init(1, 1, 1, 1), .init(2, 1, 2, 1), .init(3, 1, 3, 1)]),
-        .init(id: "leftThird",      name: "左 1/3",   cols: 3, rows: 1, regions: [.init(1, 1, 1, 1)]),
-        .init(id: "rightThird",     name: "右 1/3",   cols: 3, rows: 1, regions: [.init(3, 1, 3, 1)]),
-        .init(id: "twoThirdsLeft",  name: "左 2/3",   cols: 3, rows: 1, regions: [.init(1, 1, 2, 1)]),
-        .init(id: "twoThirdsRight", name: "右 2/3",   cols: 3, rows: 1, regions: [.init(2, 1, 3, 1)]),
-        .init(id: "quarters",       name: "四分",     cols: 2, rows: 2, regions: [.init(1, 1, 1, 1), .init(2, 1, 2, 1), .init(1, 2, 1, 2), .init(2, 2, 2, 2)]),
-        .init(id: "full",           name: "最大化",   cols: 1, rows: 1, regions: [.init(1, 1, 1, 1)]),
-        .init(id: "center",         name: "居中",     cols: 6, rows: 6, regions: [.init(2, 2, 5, 5)]),  // 原版 Centre：(2,2)-(5,5)
+        .init(id: "halves",       name: "左右半屏",        cols: 2, rows: 1, regions: [.init(1, 1, 1, 1), .init(2, 1, 2, 1)]),
+        .init(id: "vertical",     name: "上下半屏",        cols: 1, rows: 2, regions: [.init(1, 1, 1, 1), .init(1, 2, 1, 2)]),
+        .init(id: "thirds",       name: "三等分",          cols: 3, rows: 1, regions: [.init(1, 1, 1, 1), .init(2, 1, 2, 1), .init(3, 1, 3, 1)]),
+        .init(id: "narrowWide",   name: "左 1/3 + 右 2/3", cols: 3, rows: 1, regions: [.init(1, 1, 1, 1), .init(2, 1, 3, 1)]),
+        .init(id: "wideNarrow",   name: "左 2/3 + 右 1/3", cols: 3, rows: 1, regions: [.init(1, 1, 2, 1), .init(3, 1, 3, 1)]),
+        .init(id: "quarters",     name: "四分",            cols: 2, rows: 2, regions: [.init(1, 1, 1, 1), .init(2, 1, 2, 1), .init(1, 2, 1, 2), .init(2, 2, 2, 2)]),
+        .init(id: "full",         name: "最大化",          cols: 1, rows: 1, regions: [.init(1, 1, 1, 1)]),
+        .init(id: "center",       name: "居中",            cols: 6, rows: 6, regions: [.init(2, 2, 5, 5)]),  // 原版 Centre：(2,2)-(5,5)
     ]
 }
 
