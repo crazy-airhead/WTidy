@@ -682,7 +682,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
 
     @objc private func orientationChanged() {
         Prefs.stripVertical = orientVertRadio.state == .on
-        posPreview.needsDisplay = true
+        refreshState()   // 同步滑块显隐（横排↔纵排）+ 预览重绘
     }
     @objc private func posHChanged(_ sender: NSSlider) {
         // 滑杆值 0=左 ↔ 因子 0=左，方向一致
