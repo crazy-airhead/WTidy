@@ -284,11 +284,7 @@ enum LayoutIconRenderer {
             cellPath.stroke()
         }
 
-        // 悬停增亮（对齐原版：选中图标变亮）
-        if hovered {
-            NSColor.white.withAlphaComponent(0.16).setFill()
-            rect.fill(using: .sourceOver)
-        }
+        // 悬停选中：不加蒙板，仅边框高亮（内部区域块的点亮由 activeRegion 负责）
         NSGraphicsContext.restoreGraphicsState()
 
         // 外框
