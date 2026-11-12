@@ -25,7 +25,7 @@ enum Prefs {
         static let stripBackground = "stripBackground" // 0=默认深色 1=桌面壁纸
         static let animateWindows = "animateWindows"   // 原版 AnimateWindows
         static let autoGroupLayouts = "autoGroupLayouts" // 原版 AutoGroupLayouts
-        static let stripTheme = "stripTheme"           // 图标条配色主题
+        static let stripTheme = "stripTheme.v2"        // 图标条配色主题（v2：移除原版蓝后重置）
         // 快速布局（原版 Quick Layout）
         static let qlKeyCode = "qlKeyCode"
         static let qlModifiers = "qlModifiers"
@@ -163,11 +163,11 @@ enum Prefs {
         set { set(newValue, forKey: Keys.autoGroupLayouts) }
     }
 
-    /// 图标条配色主题：0=原版蓝 1=墨蓝 2=石墨 3=青碧 4=紫罗兰
+    /// 图标条配色主题：0=墨蓝（默认） 1=石墨 2=青碧 3=紫罗兰
     static var stripTheme: Int {
         get {
             let v = defaults.object(forKey: Keys.stripTheme) == nil ? 0 : defaults.integer(forKey: Keys.stripTheme)
-            return min(max(v, 0), 4)
+            return min(max(v, 0), 3)
         }
         set { set(newValue, forKey: Keys.stripTheme) }
     }

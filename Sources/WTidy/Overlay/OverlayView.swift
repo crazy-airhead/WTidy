@@ -1,23 +1,18 @@
 import AppKit
 
 /// 拖拽图标条 / 快速布局面板的配色主题（行为页「图标条配色」可选）
-/// .tidy = 对齐原版 Window Tidy：蓝色壁纸底 + 深蓝灰区域块 + 亮蓝描边（默认）
 enum StripTheme {
-    case tidy       // 原版蓝
-    case ink        // 墨蓝
+    case ink        // 墨蓝（默认）：深藏青底 + 雾蓝块
     case graphite   // 石墨
     case teal       // 青碧
     case violet     // 紫罗兰
 
     static func at(_ index: Int) -> StripTheme {
-        [StripTheme.tidy, .ink, .graphite, .teal, .violet][max(0, min(4, index))]
+        [StripTheme.ink, .graphite, .teal, .violet][max(0, min(3, index))]
     }
 
     var bgColors: [NSColor] {
         switch self {
-        case .tidy:    return [NSColor(red: 0.56, green: 0.71, blue: 0.90, alpha: 1),
-                               NSColor(red: 0.36, green: 0.55, blue: 0.84, alpha: 1),
-                               NSColor(red: 0.25, green: 0.42, blue: 0.72, alpha: 1)]
         case .ink:     return [NSColor(red: 0.13, green: 0.17, blue: 0.26, alpha: 1),
                                NSColor(red: 0.09, green: 0.12, blue: 0.19, alpha: 1)]
         case .graphite: return [NSColor(red: 0.18, green: 0.18, blue: 0.19, alpha: 1),
@@ -31,7 +26,6 @@ enum StripTheme {
 
     var cellFill: NSColor {
         switch self {
-        case .tidy:    return NSColor(red: 0.16, green: 0.21, blue: 0.30, alpha: 0.88)
         case .ink:     return NSColor(red: 0.44, green: 0.65, blue: 0.94, alpha: 0.92)
         case .graphite: return NSColor(red: 0.82, green: 0.82, blue: 0.84, alpha: 0.88)
         case .teal:    return NSColor(red: 0.25, green: 0.78, blue: 0.74, alpha: 0.92)
@@ -40,16 +34,12 @@ enum StripTheme {
     }
 
     var cellStroke: NSColor {
-        switch self {
-        case .tidy:    return NSColor(red: 0.55, green: 0.75, blue: 0.95, alpha: 0.80)
-        default:       return NSColor.white.withAlphaComponent(0.30)
-        }
+        NSColor.white.withAlphaComponent(0.30)
     }
 
     /// 悬停投影命中的区域块（亮色填充，与压暗的其余块强对比）
     var activeCellFill: NSColor {
         switch self {
-        case .tidy:    return NSColor(red: 0.88, green: 0.95, blue: 1.00, alpha: 0.97)
         case .ink:     return NSColor(red: 0.95, green: 0.97, blue: 1.00, alpha: 0.97)
         case .graphite: return NSColor(red: 1.00, green: 1.00, blue: 1.00, alpha: 0.97)
         case .teal:    return NSColor(red: 0.75, green: 1.00, blue: 0.95, alpha: 0.97)
@@ -60,7 +50,6 @@ enum StripTheme {
     /// 选中区域的描边（醒目强调色）
     var activeCellStroke: NSColor {
         switch self {
-        case .tidy:    return NSColor(red: 0.30, green: 0.55, blue: 0.95, alpha: 1)
         case .ink:     return NSColor(red: 0.30, green: 0.55, blue: 0.95, alpha: 1)
         case .graphite: return NSColor(red: 0.9, green: 0.9, blue: 0.9, alpha: 1)
         case .teal:    return NSColor(red: 0.10, green: 0.65, blue: 0.60, alpha: 1)
