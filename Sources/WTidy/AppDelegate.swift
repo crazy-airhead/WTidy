@@ -31,7 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.overlay.restoreAllWindows()
             },
             moveToActiveDisplay: { [weak self] in
-                _ = self?.overlay.moveFrontmostToActiveDisplay()
+                _ = self?.overlay.moveFrontmostToOtherDisplay()
             }
         ))
         status.setVisible(Prefs.showStatusIcon)

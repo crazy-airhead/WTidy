@@ -24,7 +24,7 @@ final class StatusMenuController: NSObject {
     private let statusLine = NSMenuItem(title: L("…"), action: nil, keyEquivalent: "")
     private let layoutSubmenu = NSMenuItem(title: L("应用布局到前台窗口"), action: nil, keyEquivalent: "")
     private let restoreAllItem = NSMenuItem(title: L("恢复所有窗口位置"), action: nil, keyEquivalent: "")
-    private let moveToDisplayItem = NSMenuItem(title: L("移动窗口到活动显示器"), action: nil, keyEquivalent: "")
+    private let moveToDisplayItem = NSMenuItem(title: L("发送窗口到另一块屏幕"), action: nil, keyEquivalent: "")
     /// attract 脉冲（对齐原版 attractState）：缺权限时图标闪烁引起注意
     private var attractTimer: Timer?
 

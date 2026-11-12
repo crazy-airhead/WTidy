@@ -351,25 +351,29 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
         onSnapApplied?(LF("已恢复 %d 个窗口原位置", restored))
     }
 
-    /// 菜单「移动到活动显示器」：把前台窗口移到光标所在屏，保持相对位置与尺寸比例
+    /// 菜单「发送窗口到另一块屏幕」：把前台窗口发送到它当前不在的那块屏，
+    /// 保持相对位置与尺寸比例。双屏时目标唯一；多屏时取鼠标所在屏作为目标。
     @discardableResult
-    func moveFrontmostToActiveDisplay() -> Bool {
+    func moveFrontmostToOtherDisplay() -> Bool {
         guard AccessibilityService.isTrusted else { return false }
         guard let win = ax.frontmostWindow(), win.canSnap, let frame = win.nsFrame else { return false }
-        guard let fromScreen = screenForWindow(win),
-              let toScreen = screenForPoint(NSEvent.mouseLocation),
-              screenNumber(of: fromScreen) != screenNumber(of: toScreen) else {
-            onSnapApplied?(L("窗口已在活动显示器上"))
+        guard let fromScreen = screenForWindow(win) else { return false }
+
+        let others = NSScreen.screens.filter { screenNumber(of: $0) != screenNumber(of: fromScreen) }
+        guard !others.isEmpty else {
+            onSnapApplied?(L("没有其他显示器可发送"))
             return false
         }
+        let toScreen = others.count == 1
+            ? others[0]
+            : (screenForPoint(NSEvent.mouseLocation) ?? others[0])
         let fromVF = fromScreen.visibleFrame
         let toVF = toScreen.visibleFrame
         // 相对位置比例映射 + 尺寸限制在目标屏内
         let relX = (frame.midX - fromVF.minX) / max(fromVF.width, 1)
         let relY = (fromVF.maxY - frame.midY) / max(fromVF.height, 1)
-        var w = min(frame.width, toVF.width)
-        var h = min(frame.height, toVF.height)
-        w = min(w, toVF.width); h = min(h, toVF.height)
+        let w = min(frame.width, toVF.width)
+        let h = min(frame.height, toVF.height)
         let x = toVF.minX + relX * toVF.width - w / 2
         let yTop = toVF.minY + relY * toVF.height + h / 2
         let target = CGRect(x: x, y: yTop - h, width: w, height: h).intersection(toVF)
