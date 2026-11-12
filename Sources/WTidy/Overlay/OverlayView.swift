@@ -105,9 +105,9 @@ final class OverlayView: NSView {
 }
 
 enum OverlayMetrics {
-    /// 布局图标尺寸：对齐原版拖拽条的图标观感（~64-110pt 宽）
-    static let iconMaxWidth: CGFloat = 110
-    static let iconMinWidth: CGFloat = 64
+    /// 布局图标尺寸：基准 76pt（对齐原版观感），收缩下限 68pt
+    static let iconBaseWidth: CGFloat = 76
+    static let iconMinWidth: CGFloat = 68
     static let iconAspectRatio: CGFloat = 0.58   // 高/宽
     static let thumbSpacing: CGFloat = 10
     static let stripPadding: CGFloat = 12

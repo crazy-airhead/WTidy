@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var watchdog: Timer?
     private var watchdogTickCount = 0
     private var lastKnownTrusted = false
+    private var hotkeyRefreshDebounce: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
@@ -60,7 +61,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in
             self?.status.refreshToggles()
             self?.status.setVisible(Prefs.showStatusIcon)
-            HotkeyManager.shared.refresh()
+            // 防抖：滑杆连续滑动等场景会高频触发，Carbon 重注册开销大
+            // （曾把滑杆拖拽跟踪循环卡死），200ms 合并一次
+            self?.hotkeyRefreshDebounce?.invalidate()
+            let timer = Timer(timeInterval: 0.2, repeats: false) { _ in
+                HotkeyManager.shared.refresh()
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            self?.hotkeyRefreshDebounce = timer
         }
 
         lastKnownTrusted = AccessibilityService.isTrusted

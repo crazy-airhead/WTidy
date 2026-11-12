@@ -620,7 +620,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         orientHoriRadio.state = Prefs.stripVertical ? .off : .on
         orientVertRadio.state = Prefs.stripVertical ? .on : .off
         posHSlider.doubleValue = Prefs.stripPosX
-        posVSlider.doubleValue = Prefs.stripPosY
+        posVSlider.doubleValue = 1 - Prefs.stripPosY   // 因子 0=顶 ↔ 滑块 1=上，取反
         maxWidthField.stringValue = String(Int(Prefs.stripMaxWidth))
         marginField.stringValue = String(Int(Prefs.stripMargin))
         posPreview.needsDisplay = true
@@ -629,7 +629,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         qlRecorder.title = Self.hotkeyDisplay(keyCode: Prefs.qlKeyCode, modifiers: Prefs.qlModifiers)
         qlNearCursorCheck.state = Prefs.qlNearCursor ? .on : .off
         qlPosHSlider.doubleValue = Prefs.qlPosX
-        qlPosVSlider.doubleValue = Prefs.qlPosY
+        qlPosVSlider.doubleValue = 1 - Prefs.qlPosY
         qlPosHSlider.isEnabled = !Prefs.qlNearCursor
         qlPosVSlider.isEnabled = !Prefs.qlNearCursor
         qlWidthField.stringValue = String(Int(Prefs.qlWidth))
@@ -680,12 +680,14 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         Prefs.stripVertical = orientVertRadio.state == .on
         posPreview.needsDisplay = true
     }
-    @objc private func posHChanged() {
-        Prefs.stripPosX = posHSlider.doubleValue
+    @objc private func posHChanged(_ sender: NSSlider) {
+        // 滑杆值 0=左 ↔ 因子 0=左，方向一致
+        Prefs.stripPosX = sender.doubleValue
         posPreview.needsDisplay = true
     }
-    @objc private func posVChanged() {
-        Prefs.stripPosY = posVSlider.doubleValue
+    @objc private func posVChanged(_ sender: NSSlider) {
+        // 滑杆值 0=下/1=上（纵向滑块向上增大），而因子 0=顶——取反对齐直觉
+        Prefs.stripPosY = 1 - sender.doubleValue
         posPreview.needsDisplay = true
     }
     @objc private func maxWidthCommitted(_ sender: NSTextField) {
@@ -700,8 +702,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     // MARK: - 快速布局页动作
 
     @objc private func qlNearCursorChanged() { Prefs.qlNearCursor = qlNearCursorCheck.state == .on; refreshState() }
-    @objc private func qlPosHChanged() { Prefs.qlPosX = qlPosHSlider.doubleValue; qlPreview.needsDisplay = true }
-    @objc private func qlPosVChanged() { Prefs.qlPosY = qlPosVSlider.doubleValue; qlPreview.needsDisplay = true }
+    @objc private func qlPosHChanged(_ sender: NSSlider) { Prefs.qlPosX = sender.doubleValue; qlPreview.needsDisplay = true }
+    @objc private func qlPosVChanged(_ sender: NSSlider) { Prefs.qlPosY = 1 - sender.doubleValue; qlPreview.needsDisplay = true }
     @objc private func qlWidthCommitted(_ sender: NSTextField) {
         Prefs.qlWidth = Double(sender.stringValue) ?? Prefs.qlWidth
         refreshState()

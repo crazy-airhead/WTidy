@@ -15,7 +15,8 @@ enum StripGeometry {
 
         func fit(along extent: CGFloat) -> CGFloat {
             let available = extent - 2 * margin - (count - 1) * spacing
-            return max(OverlayMetrics.iconMinWidth, min(OverlayMetrics.iconMaxWidth, available / count))
+            // 基准 76pt（对齐原版观感）；空间不足时收缩，下限 68pt
+            return max(OverlayMetrics.iconMinWidth, min(OverlayMetrics.iconBaseWidth, available / count))
         }
 
         let vertical = Prefs.stripVertical
