@@ -405,6 +405,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         dimsRow.orientation = .horizontal
         dimsRow.spacing = 8
         stack.addArrangedSubview(dimsRow)
+        stack.addArrangedSubview(captionText("数值为整条图标条的总宽度；单图标宽 = 可用宽度 ÷ 布局数（基准 150pt，下限 90pt）。"))
 
         stack.addArrangedSubview(sectionTitle("窗口间隙"))
         gapSegment.translatesAutoresizingMaskIntoConstraints = false
