@@ -46,22 +46,25 @@ enum StripTheme {
         }
     }
 
-    /// 悬停投影命中的区域块（更亮，用于「拖到这里了」的即时反馈）
+    /// 悬停投影命中的区域块（亮色填充，与压暗的其余块强对比）
     var activeCellFill: NSColor {
         switch self {
-        case .tidy:    return NSColor(red: 0.28, green: 0.38, blue: 0.52, alpha: 0.95)
-        case .ink:     return NSColor(red: 0.62, green: 0.80, blue: 1.00, alpha: 1)
-        case .graphite: return NSColor(red: 1.00, green: 1.00, blue: 1.00, alpha: 1)
-        case .teal:    return NSColor(red: 0.55, green: 0.95, blue: 0.90, alpha: 1)
-        case .violet:  return NSColor(red: 0.85, green: 0.72, blue: 1.00, alpha: 1)
+        case .tidy:    return NSColor(red: 0.88, green: 0.95, blue: 1.00, alpha: 0.97)
+        case .ink:     return NSColor(red: 0.95, green: 0.97, blue: 1.00, alpha: 0.97)
+        case .graphite: return NSColor(red: 1.00, green: 1.00, blue: 1.00, alpha: 0.97)
+        case .teal:    return NSColor(red: 0.75, green: 1.00, blue: 0.95, alpha: 0.97)
+        case .violet:  return NSColor(red: 0.90, green: 0.82, blue: 1.00, alpha: 0.97)
         }
     }
 
-    /// 选中区域的描边（原版：亮青蓝发光感）
+    /// 选中区域的描边（醒目强调色）
     var activeCellStroke: NSColor {
         switch self {
-        case .tidy:    return NSColor(red: 0.65, green: 0.88, blue: 1.00, alpha: 1)
-        default:       return NSColor.white.withAlphaComponent(0.55)
+        case .tidy:    return NSColor(red: 0.30, green: 0.55, blue: 0.95, alpha: 1)
+        case .ink:     return NSColor(red: 0.30, green: 0.55, blue: 0.95, alpha: 1)
+        case .graphite: return NSColor(red: 0.9, green: 0.9, blue: 0.9, alpha: 1)
+        case .teal:    return NSColor(red: 0.10, green: 0.65, blue: 0.60, alpha: 1)
+        case .violet:  return NSColor(red: 0.55, green: 0.35, blue: 0.90, alpha: 1)
         }
     }
 }
@@ -90,33 +93,28 @@ final class OverlayView: NSView {
     override var isFlipped: Bool { true }
 
     override func draw(_ dirtyRect: NSRect) {
-        // 展开态：无整屏蒙板。选中区 = 强调色实心填充 + 粗实线白边；
-        // 未选中区 = 虚线空心边框。实线/虚线 + 填充/空心的强对比一眼可辨。
+        // 展开态（屏幕最终选择区）：不加蒙板、不填充——只画边框。
+        // 选中的分区 = 粗亮边框（黑外衬 4 + 白线 3）；未选中 = 细暗边框。
         if model.veilRect != nil {
             for (i, zone) in model.zones.enumerated() {
                 let z = convert(zone)
                 let hovered = (i == model.hoveredZoneIndex)
                 let path = NSBezierPath(roundedRect: z.insetBy(dx: 3, dy: 3), xRadius: 10, yRadius: 10)
                 if hovered {
-                    NSColor.controlAccentColor.withAlphaComponent(0.45).setFill()
-                    path.fill()
                     let outer = NSBezierPath(roundedRect: z.insetBy(dx: 2, dy: 2), xRadius: 10, yRadius: 10)
-                    NSColor.black.withAlphaComponent(0.50).setStroke()
+                    NSColor.black.withAlphaComponent(0.45).setStroke()
                     outer.lineWidth = 4
                     outer.stroke()
-                    NSColor.white.withAlphaComponent(1.0).setStroke()
+                    NSColor.white.withAlphaComponent(0.98).setStroke()
                     path.lineWidth = 3
                     path.stroke()
                 } else {
-                    // 未选中：虚线空心，弱化存在感
-                    let under = path.copy() as! NSBezierPath
-                    NSColor.black.withAlphaComponent(0.30).setStroke()
-                    under.lineWidth = 2.5
-                    under.setLineDash([6, 6], count: 2, phase: 0)
-                    under.stroke()
-                    NSColor.white.withAlphaComponent(0.55).setStroke()
+                    let outer = NSBezierPath(roundedRect: z.insetBy(dx: 2, dy: 2), xRadius: 10, yRadius: 10)
+                    NSColor.black.withAlphaComponent(0.22).setStroke()
+                    outer.lineWidth = 2
+                    outer.stroke()
+                    NSColor.white.withAlphaComponent(0.45).setStroke()
                     path.lineWidth = 1.5
-                    path.setLineDash([6, 6], count: 2, phase: 0)
                     path.stroke()
                 }
             }
@@ -259,7 +257,8 @@ enum LayoutIconRenderer {
         }
         grid.stroke()
 
-        // 3) 区域块：投影命中的区域用高亮色（拖到哪亮到哪）
+        // 3) 区域块（定位框内部）：投影命中的区域块高亮成亮色，
+        //    其余区域块压暗——图标内部的选中/未选中对比拉满
         for (ri, nr) in layout.normalizedRects.enumerated() {
             let cellPath = NSBezierPath(roundedRect: cellRect(nr).insetBy(dx: 1.5, dy: 1.5),
                                         xRadius: 4, yRadius: 4)
@@ -269,7 +268,11 @@ enum LayoutIconRenderer {
                     theme.activeCellFill.setFill()
                     theme.activeCellStroke.setStroke()
                 } else {
-                    theme.cellFill.setFill()
+                    var dim = theme.cellFill
+                    if activeRegion != nil {
+                        dim = dim.withAlphaComponent(dim.alphaComponent * 0.40)   // 其余块压暗
+                    }
+                    dim.setFill()
                     theme.cellStroke.setStroke()
                 }
             case .light:
