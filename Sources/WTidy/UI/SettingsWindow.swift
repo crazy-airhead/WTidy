@@ -932,7 +932,9 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
         super.init()
 
         window.title = isNew ? "新增布局" : "编辑布局：\(layout.name)"
-        window.isReleasedWhenClosed = true
+        // ARC 下必须为 false：true 会让 AppKit 在 close 时手动释放 ARC 持有的
+        // NSWindow，造成过度释放，在下一次 autorelease pool drain 时闪退
+        window.isReleasedWhenClosed = false
         window.delegate = self
 
         buildUI()

@@ -38,6 +38,7 @@ final class QuickLayoutController: NSObject {
         p.level = .floating
         p.isOpaque = false
         p.backgroundColor = .clear
+        p.isReleasedWhenClosed = false   // ARC 下防御性关闭（panel 默认 true）
         p.hidesOnDeactivate = false
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         p.setFrame(placementRect(width: width, height: height), display: true)
