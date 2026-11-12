@@ -116,6 +116,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         layoutTable.allowsColumnReordering = false
         layoutTable.intercellSpacing = NSSize(width: 0, height: 8)
         layoutTable.style = .plain
+        layoutTable.draggingDestinationFeedbackStyle = .gap   // 拖拽排序时显示插入空隙
+        layoutTable.registerForDraggedTypes([Self.layoutDragType])  // 不注册则永远不是拖放目标
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("layout"))
         column.width = 640
         layoutTable.addTableColumn(column)
@@ -1383,8 +1385,9 @@ extension SettingsWindowController {
 
     func tableView(_ tableView: NSTableView, validateDrop info: NSDraggingInfo,
                    proposedRow row: Int, proposedDropOperation dropOperation: NSTableView.DropOperation) -> NSDragOperation {
-        guard dropOperation == .above,
-              info.draggingPasteboard.types?.contains(Self.layoutDragType) == true else { return [] }
+        guard info.draggingPasteboard.types?.contains(Self.layoutDragType) == true else { return [] }
+        // AppKit 默认提议 .on，必须主动改为 .above（插入语义）
+        tableView.setDropRow(row, dropOperation: .above)
         return .move
     }
 
