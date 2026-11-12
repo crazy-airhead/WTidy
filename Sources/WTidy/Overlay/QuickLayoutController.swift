@@ -122,7 +122,7 @@ final class QuickIconsView: NSView {
         super.init(frame: .zero)
     }
 
-    required init?(coder: NSCoder) { fatalError("init(coder:) 未实现") }
+    required init?(coder: NSCoder) { fatalError(L("init(coder:) 未实现")) }
 
     override var isFlipped: Bool { true }
 

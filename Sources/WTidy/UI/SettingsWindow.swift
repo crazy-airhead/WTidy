@@ -13,10 +13,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     private let tabView = NSTabView()
 
     // 通用页控件
-    private let dragCheck = NSButton(checkboxWithTitle: "启用拖拽分屏", target: nil, action: nil)
-    private let hotkeyCheck = NSButton(checkboxWithTitle: "启用全局快捷键", target: nil, action: nil)
-    private let loginCheck = NSButton(checkboxWithTitle: "开机自动启动", target: nil, action: nil)
-    private let gapSegment = NSSegmentedControl(labels: ["贴合", "4pt", "8pt", "12pt"],
+    private let dragCheck = NSButton(checkboxWithTitle: L("启用拖拽分屏"), target: nil, action: nil)
+    private let hotkeyCheck = NSButton(checkboxWithTitle: L("启用全局快捷键"), target: nil, action: nil)
+    private let loginCheck = NSButton(checkboxWithTitle: L("开机自动启动"), target: nil, action: nil)
+    private let gapSegment = NSSegmentedControl(labels: [L("贴合"), "4pt", "8pt", "12pt"],
                                                 trackingMode: .selectOne, target: nil, action: nil)
     private let permissionRow = NSStackView()
     private var hotkeyToggles: [NSButton] = []
@@ -28,7 +28,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         super.init()
 
         // 对齐原版窗口 chrome：标题 + 顶部 tab + 底部栏（自启勾选 + 完成按钮）
-        window.title = "WTidy 偏好设置"
+        window.title = L("WTidy 偏好设置")
         window.isReleasedWhenClosed = false
         window.delegate = self
 
@@ -61,7 +61,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
 
         loginCheck.frame = NSRect(x: 16, y: (barHeight - 24) / 2, width: 220, height: 24)
         bar.addSubview(loginCheck)
-        let doneButton = NSButton(title: "完成", target: self, action: #selector(doneClicked))
+        let doneButton = NSButton(title: L("完成"), target: self, action: #selector(doneClicked))
         doneButton.keyEquivalent = "\r"
         doneButton.bezelStyle = .rounded
         doneButton.frame = NSRect(x: width - 16 - 76, y: (barHeight - 28) / 2, width: 76, height: 28)
@@ -102,7 +102,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         let (content, stack) = makePage()
         stack.spacing = 8
 
-        let caption = captionText("拖动可更改布局顺序，双击某行编辑其设置。图标条按此列表顺序展示。")
+        let caption = captionText(L("拖动可更改布局顺序，双击某行编辑其设置。图标条按此列表顺序展示。"))
         stack.addArrangedSubview(caption)
         stack.setCustomSpacing(10, after: caption)
 
@@ -131,13 +131,13 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         stack.setCustomSpacing(12, after: layoutScrollView)
 
         // 左下角 +/−（对齐原版），右侧保留「恢复内置」
-        let addButton = NSButton(title: "＋", target: self, action: #selector(addLayoutClicked))
+        let addButton = NSButton(title: L("＋"), target: self, action: #selector(addLayoutClicked))
         addButton.bezelStyle = .rounded
         addButton.widthAnchor.constraint(equalToConstant: 40).isActive = true
-        let removeButton = NSButton(title: "－", target: self, action: #selector(removeSelectedLayout))
+        let removeButton = NSButton(title: L("－"), target: self, action: #selector(removeSelectedLayout))
         removeButton.bezelStyle = .rounded
         removeButton.widthAnchor.constraint(equalToConstant: 40).isActive = true
-        let resetButton = NSButton(title: "恢复内置布局", target: self, action: #selector(resetLayoutsClicked))
+        let resetButton = NSButton(title: L("恢复内置布局"), target: self, action: #selector(resetLayoutsClicked))
         resetButton.bezelStyle = .rounded
         let plusMinus = NSStackView(views: [addButton, removeButton])
         plusMinus.orientation = .horizontal
@@ -152,7 +152,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         stack.addArrangedSubview(bottom)
 
         let item = NSTabViewItem(identifier: "layouts")
-        item.label = "布局"
+        item.label = L("布局")
         item.view = content
         return item
     }
@@ -177,7 +177,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
 
     @objc private func addLayoutClicked() {
         let newLayout = TidyLayout(id: "custom-" + UUID().uuidString.prefix(8),
-                                   name: "新布局",
+                                   name: L("新布局"),
                                    cols: 6, rows: 6,
                                    regions: [.init(2, 2, 5, 5)])
         LayoutEditorWindowController.present(layout: newLayout, isNew: true) { [weak self] edited in
@@ -235,21 +235,21 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
 
     // MARK: - 行为页（原版 Options：标题在外、控件在圆角分组框内）
 
-    private let optionHideRadio = NSButton(radioButtonWithTitle: "按住 ⌥ 隐藏布局图标", target: nil, action: nil)
-    private let optionShowRadio = NSButton(radioButtonWithTitle: "按住 ⌥ 显示布局图标", target: nil, action: nil)
-    private let statusIconCheck = NSButton(checkboxWithTitle: "显示菜单栏状态图标", target: nil, action: nil)
-    private let namesCheck = NSButton(checkboxWithTitle: "在布局图标上显示名称", target: nil, action: nil)
-    private let warnCheck = NSButton(checkboxWithTitle: "窗口未能调整尺寸时显示警告", target: nil, action: nil)
-    private let animateCheck = NSButton(checkboxWithTitle: "吸附窗口动画（跨屏分阶段移动）", target: nil, action: nil)
-    private let groupCheck = NSButton(checkboxWithTitle: "自动分组相邻互补布局", target: nil, action: nil)
-    private let themeTidyRadio = NSButton(radioButtonWithTitle: "原版蓝", target: nil, action: nil)
-    private let themeInkRadio = NSButton(radioButtonWithTitle: "墨蓝", target: nil, action: nil)
-    private let themeGraphiteRadio = NSButton(radioButtonWithTitle: "石墨", target: nil, action: nil)
-    private let themeTealRadio = NSButton(radioButtonWithTitle: "青碧", target: nil, action: nil)
-    private let themeVioletRadio = NSButton(radioButtonWithTitle: "紫罗兰", target: nil, action: nil)
+    private let optionHideRadio = NSButton(radioButtonWithTitle: L("按住 ⌥ 隐藏布局图标"), target: nil, action: nil)
+    private let optionShowRadio = NSButton(radioButtonWithTitle: L("按住 ⌥ 显示布局图标"), target: nil, action: nil)
+    private let statusIconCheck = NSButton(checkboxWithTitle: L("显示菜单栏状态图标"), target: nil, action: nil)
+    private let namesCheck = NSButton(checkboxWithTitle: L("在布局图标上显示名称"), target: nil, action: nil)
+    private let warnCheck = NSButton(checkboxWithTitle: L("窗口未能调整尺寸时显示警告"), target: nil, action: nil)
+    private let animateCheck = NSButton(checkboxWithTitle: L("吸附窗口动画（跨屏分阶段移动）"), target: nil, action: nil)
+    private let groupCheck = NSButton(checkboxWithTitle: L("自动分组相邻互补布局"), target: nil, action: nil)
+    private let themeTidyRadio = NSButton(radioButtonWithTitle: L("原版蓝"), target: nil, action: nil)
+    private let themeInkRadio = NSButton(radioButtonWithTitle: L("墨蓝"), target: nil, action: nil)
+    private let themeGraphiteRadio = NSButton(radioButtonWithTitle: L("石墨"), target: nil, action: nil)
+    private let themeTealRadio = NSButton(radioButtonWithTitle: L("青碧"), target: nil, action: nil)
+    private let themeVioletRadio = NSButton(radioButtonWithTitle: L("紫罗兰"), target: nil, action: nil)
     private let bgWell = NSImageView(frame: NSRect(x: 0, y: 0, width: 220, height: 124))
-    private let bgDefaultButton = NSButton(title: "默认深色", target: nil, action: nil)
-    private let bgWallpaperButton = NSButton(title: "使用桌面壁纸", target: nil, action: nil)
+    private let bgDefaultButton = NSButton(title: L("默认深色"), target: nil, action: nil)
+    private let bgWallpaperButton = NSButton(title: L("使用桌面壁纸"), target: nil, action: nil)
 
     /// 原版式分组框：小节标题在外，控件装进圆角框
     private func groupBox(_ controls: [NSView], width: CGFloat = 660) -> NSView {
@@ -272,8 +272,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         let (content, stack) = makePage()
         stack.spacing = 8
 
-        stack.addArrangedSubview(sectionTitle("行为"))
-        let behaviorIntro = captionText("⌥ 选项按钮用于控制布局图标的显示。")
+        stack.addArrangedSubview(sectionTitle(L("行为")))
+        let behaviorIntro = captionText(L("⌥ 选项按钮用于控制布局图标的显示。"))
         optionHideRadio.target = self
         optionHideRadio.action = #selector(optionKeyModeChanged)
         optionShowRadio.target = self
@@ -281,14 +281,14 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         stack.addArrangedSubview(groupBox([behaviorIntro, optionHideRadio, optionShowRadio,
                                            statusIconCheck, groupCheck, namesCheck, warnCheck]))
 
-        stack.addArrangedSubview(sectionTitle("窗口调整"))
+        stack.addArrangedSubview(sectionTitle(L("窗口调整")))
         stack.addArrangedSubview(groupBox([animateCheck, groupCheck, dragCheck, hotkeyCheck]))
 
-        stack.addArrangedSubview(sectionTitle("图标条配色"))
+        stack.addArrangedSubview(sectionTitle(L("图标条配色")))
         stack.addArrangedSubview(groupBox([themeTidyRadio, themeInkRadio, themeGraphiteRadio, themeTealRadio, themeVioletRadio]))
 
-        stack.addArrangedSubview(sectionTitle("背景"))
-        let bgIntro = captionText("布局图标条背景可使用默认深色或桌面壁纸。")
+        stack.addArrangedSubview(sectionTitle(L("背景")))
+        let bgIntro = captionText(L("布局图标条背景可使用默认深色或桌面壁纸。"))
         bgDefaultButton.target = self
         bgDefaultButton.action = #selector(bgDefaultClicked)
         bgWallpaperButton.target = self
@@ -314,9 +314,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         let warnIcon = NSImageView(image: NSImage(systemSymbolName: "exclamationmark.triangle.fill",
                                                  accessibilityDescription: nil) ?? NSImage())
         warnIcon.contentTintColor = .systemYellow
-        let warnText = NSTextField(labelWithString: "缺少辅助功能权限，功能未生效")
+        let warnText = NSTextField(labelWithString: L("缺少辅助功能权限，功能未生效"))
         warnText.font = .systemFont(ofSize: 12)
-        let grantButton = NSButton(title: "去授权", target: self, action: #selector(grantClicked))
+        let grantButton = NSButton(title: L("去授权"), target: self, action: #selector(grantClicked))
         permissionRow.orientation = .horizontal
         permissionRow.spacing = 8
         permissionRow.addArrangedSubview(warnIcon)
@@ -325,7 +325,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         stack.addArrangedSubview(permissionRow)
 
         let item = NSTabViewItem(identifier: "options")
-        item.label = "行为"
+        item.label = L("行为")
         item.view = content
         return item
     }
@@ -352,8 +352,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
 
     // MARK: - 定位页（原版 Positioning）
 
-    private let orientHoriRadio = NSButton(radioButtonWithTitle: "横向排列图标", target: nil, action: nil)
-    private let orientVertRadio = NSButton(radioButtonWithTitle: "纵向排列图标", target: nil, action: nil)
+    private let orientHoriRadio = NSButton(radioButtonWithTitle: L("横向排列图标"), target: nil, action: nil)
+    private let orientVertRadio = NSButton(radioButtonWithTitle: L("纵向排列图标"), target: nil, action: nil)
     private let posPreview = ScreenPositionPreviewView(frame: NSRect(x: 0, y: 0, width: 600, height: 340))
     private let posHSlider = NSSlider(value: 0.5, minValue: 0, maxValue: 1,
                                       target: nil, action: #selector(posHChanged))
@@ -371,7 +371,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
             return f
         }
 
-        stack.addArrangedSubview(sectionTitle("排列方向"))
+        stack.addArrangedSubview(sectionTitle(L("排列方向")))
         orientHoriRadio.target = self
         orientHoriRadio.action = #selector(orientationChanged)
         orientVertRadio.target = self
@@ -381,7 +381,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         orientRow.spacing = 16
         stack.addArrangedSubview(orientRow)
 
-        stack.addArrangedSubview(sectionTitle("屏幕位置"))
+        stack.addArrangedSubview(sectionTitle(L("屏幕位置")))
         // 对齐原版：滑块与排列方式联动——横向排列只显示纵向滑块（调上下），
         // 纵向排列只显示横向滑块（调左右）；显隐在 refreshState 里切换
         posHSlider.target = self
@@ -409,26 +409,26 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         posRow.spacing = 10
         stack.addArrangedSubview(posRow)
 
-        stack.addArrangedSubview(sectionTitle("尺寸"))
+        stack.addArrangedSubview(sectionTitle(L("尺寸")))
         maxWidthField.target = self
         maxWidthField.action = #selector(maxWidthCommitted)
         marginField.target = self
         marginField.action = #selector(marginCommitted)
         maxWidthField.widthAnchor.constraint(equalToConstant: 70).isActive = true
         marginField.widthAnchor.constraint(equalToConstant: 70).isActive = true
-        let dimsRow = NSStackView(views: [label("最大宽度"), maxWidthField, label("边距"), marginField])
+        let dimsRow = NSStackView(views: [label(L("最大宽度")), maxWidthField, label(L("边距")), marginField])
         dimsRow.orientation = .horizontal
         dimsRow.spacing = 8
         stack.addArrangedSubview(dimsRow)
-        stack.addArrangedSubview(captionText("数值为整条图标条的总宽度；单图标宽 = 可用宽度 ÷ 布局数（基准 150pt，下限 90pt）。"))
+        stack.addArrangedSubview(captionText(L("数值为整条图标条的总宽度；单图标宽 = 可用宽度 ÷ 布局数（基准 150pt，下限 90pt）。")))
 
-        stack.addArrangedSubview(sectionTitle("窗口间隙"))
+        stack.addArrangedSubview(sectionTitle(L("窗口间隙")))
         gapSegment.translatesAutoresizingMaskIntoConstraints = false
         stack.addArrangedSubview(gapSegment)
-        stack.addArrangedSubview(captionText("贴合为原版 Window Tidy 的行为；间距可让相邻窗口留出呼吸感。"))
+        stack.addArrangedSubview(captionText(L("贴合为原版 Window Tidy 的行为；间距可让相邻窗口留出呼吸感。")))
 
         let item = NSTabViewItem(identifier: "positioning")
-        item.label = "定位"
+        item.label = L("定位")
         item.view = content
         return item
     }
@@ -436,7 +436,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     // MARK: - 快速布局页（原版 Quick Layout）
 
     private let qlRecorder = HotkeyRecorderButton(title: "")
-    private let qlNearCursorCheck = NSButton(checkboxWithTitle: "显示在鼠标光标附近", target: nil, action: nil)
+    private let qlNearCursorCheck = NSButton(checkboxWithTitle: L("显示在鼠标光标附近"), target: nil, action: nil)
     private let qlPosHSlider = NSSlider(value: 0.5, minValue: 0, maxValue: 1, target: nil, action: nil)
     private let qlPosVSlider = NSSlider(value: 0.5, minValue: 0, maxValue: 1, target: nil, action: nil)
     private let qlPreview = ScreenPositionPreviewView(frame: NSRect(x: 0, y: 0, width: 600, height: 300))
@@ -452,8 +452,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
             return f
         }
 
-        stack.addArrangedSubview(sectionTitle("激活"))
-        stack.addArrangedSubview(captionText("全局快捷键呼出快速布局面板：点选图标即把前台窗口吸到对应区域（含图标内投影选区）。Esc 或点击面板外关闭。"))
+        stack.addArrangedSubview(sectionTitle(L("激活")))
+        stack.addArrangedSubview(captionText(L("全局快捷键呼出快速布局面板：点选图标即把前台窗口吸到对应区域（含图标内投影选区）。Esc 或点击面板外关闭。")))
         qlRecorder.onRecord = { [weak self] keyCode, modifiers in
             Prefs.qlKeyCode = keyCode
             Prefs.qlModifiers = modifiers
@@ -462,7 +462,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         qlRecorder.widthAnchor.constraint(equalToConstant: 260).isActive = true
         stack.addArrangedSubview(qlRecorder)
 
-        stack.addArrangedSubview(sectionTitle("面板位置"))
+        stack.addArrangedSubview(sectionTitle(L("面板位置")))
         qlNearCursorCheck.target = self
         qlNearCursorCheck.action = #selector(qlNearCursorChanged)
         stack.addArrangedSubview(qlNearCursorCheck)
@@ -490,20 +490,20 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         qlPosRow.spacing = 10
         stack.addArrangedSubview(qlPosRow)
 
-        stack.addArrangedSubview(sectionTitle("面板尺寸"))
+        stack.addArrangedSubview(sectionTitle(L("面板尺寸")))
         qlWidthField.target = self
         qlWidthField.action = #selector(qlWidthCommitted)
         qlHeightField.target = self
         qlHeightField.action = #selector(qlHeightCommitted)
         qlWidthField.widthAnchor.constraint(equalToConstant: 70).isActive = true
         qlHeightField.widthAnchor.constraint(equalToConstant: 70).isActive = true
-        let dimsRow = NSStackView(views: [label("宽度"), qlWidthField, label("高度"), qlHeightField])
+        let dimsRow = NSStackView(views: [label(L("宽度")), qlWidthField, label(L("高度")), qlHeightField])
         dimsRow.orientation = .horizontal
         dimsRow.spacing = 8
         stack.addArrangedSubview(dimsRow)
 
         let item = NSTabViewItem(identifier: "quicklayout")
-        item.label = "快速布局"
+        item.label = L("快速布局")
         item.view = content
         return item
     }
@@ -530,10 +530,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
             stack.addArrangedSubview(row)
         }
         stack.setCustomSpacing(16, after: stack.arrangedSubviews.last!)
-        stack.addArrangedSubview(captionText("快捷键与拖拽分屏互为补充；某些应用不支持拖拽感知时，快捷键仍可分屏。"))
+        stack.addArrangedSubview(captionText(L("快捷键与拖拽分屏互为补充；某些应用不支持拖拽感知时，快捷键仍可分屏。")))
 
         let item = NSTabViewItem(identifier: "hotkeys")
-        item.label = "快捷键"
+        item.label = L("快捷键")
         item.view = content
         return item
     }
@@ -559,7 +559,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         logPath.textColor = .secondaryLabelColor
         logPath.lineBreakMode = .byTruncatingMiddle
         logPath.preferredMaxLayoutWidth = 440
-        let openLog = NSButton(title: "打开日志", target: self, action: #selector(openLogClicked))
+        let openLog = NSButton(title: L("打开日志"), target: self, action: #selector(openLogClicked))
 
         let stack = NSStackView(views: [icon, title, credit, logPath, openLog])
         stack.orientation = .vertical
@@ -574,7 +574,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         ])
 
         let item = NSTabViewItem(identifier: "about")
-        item.label = "关于"
+        item.label = L("关于")
         item.view = content
         return item
     }
@@ -764,14 +764,14 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         case 18: base = "1"; case 19: base = "2"; case 20: base = "3"; case 21: base = "4"
         case 23: base = "5"; case 22: base = "6"; case 26: base = "7"; case 28: base = "8"
         case 25: base = "9"; case 29: base = "0"
-        case 123: base = "←"; case 124: base = "→"; case 125: base = "↓"; case 126: base = "↑"
-        case 49: base = "Space"; case 36: base = "↩"; case 48: base = "⇥"
+        case 123: base = L("←"); case 124: base = L("→"); case 125: base = L("↓"); case 126: base = L("↑")
+        case 49: base = "Space"; case 36: base = L("↩"); case 48: base = L("⇥")
         default: base = "Key(\(keyCode))"
         }
-        let ctrl = modifiers & controlKey != 0 ? "⌃" : ""
-        let opt = modifiers & optionKey != 0 ? "⌥" : ""
-        let cmd = modifiers & cmdKey != 0 ? "⌘" : ""
-        let shift = modifiers & shiftKey != 0 ? "⇧" : ""
+        let ctrl = modifiers & controlKey != 0 ? L("⌃") : ""
+        let opt = modifiers & optionKey != 0 ? L("⌥") : ""
+        let cmd = modifiers & cmdKey != 0 ? L("⌘") : ""
+        let shift = modifiers & shiftKey != 0 ? L("⇧") : ""
         return ctrl + opt + cmd + shift + base
     }
 
@@ -894,7 +894,7 @@ final class HotkeyRecorderButton: NSButton {
         self.title = title
     }
 
-    required init?(coder: NSCoder) { fatalError("init(coder:) 未实现") }
+    required init?(coder: NSCoder) { fatalError(L("init(coder:) 未实现")) }
 
     override func mouseDown(with event: NSEvent) {
         startRecording()
@@ -903,7 +903,7 @@ final class HotkeyRecorderButton: NSButton {
     private func startRecording() {
         guard monitor == nil else { return }
         previousTitle = title
-        title = "请按下快捷键…（Esc 取消，需含修饰键）"
+        title = L("请按下快捷键…（Esc 取消，需含修饰键）")
 
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self = self else { return event }
@@ -956,7 +956,7 @@ final class LayoutGridCanvasView: NSView {
         super.init(frame: NSRect(x: 0, y: 0, width: 470, height: 300))
     }
 
-    required init?(coder: NSCoder) { fatalError("init(coder:) 未实现") }
+    required init?(coder: NSCoder) { fatalError(L("init(coder:) 未实现")) }
 
     override var isFlipped: Bool { true }   // 顶行在上，与网格 (1,1) 直觉一致
 
@@ -1094,10 +1094,10 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
     private let colsField: NSTextField
     private let rowsField: NSTextField
     private let scopePopUp = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 220, height: 26), pullsDown: false)
-    private let shortcutRecorder = HotkeyRecorderButton(title: "未设置（点击录制）")
+    private let shortcutRecorder = HotkeyRecorderButton(title: L("未设置（点击录制）"))
     private let canvas: LayoutGridCanvasView
     private let previewView: NSImageView
-    private let deleteRegionButton = NSButton(title: "删除所选区域", target: nil, action: nil)
+    private let deleteRegionButton = NSButton(title: L("删除所选区域"), target: nil, action: nil)
     private var working: TidyLayout
     private let isNew: Bool
     private let onCommit: (TidyLayout) -> Void
@@ -1168,7 +1168,7 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
         nameField.font = .systemFont(ofSize: 13)
         nameField.widthAnchor.constraint(equalToConstant: 380).isActive = true
         nameField.delegate = self
-        stack.addArrangedSubview(fieldRow([label("名称"), nameField]))
+        stack.addArrangedSubview(fieldRow([label(L("名称")), nameField]))
 
         // 激活快捷键（原版 Activation Shortcut：应用到前台窗口）
         shortcutRecorder.onRecord = { [weak self] keyCode, modifiers in
@@ -1177,11 +1177,11 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
             self?.shortcutRecorder.title = SettingsWindowController.hotkeyDisplay(keyCode: keyCode, modifiers: modifiers)
         }
         shortcutRecorder.widthAnchor.constraint(equalToConstant: 380).isActive = true
-        stack.addArrangedSubview(fieldRow([label("激活快捷键"), shortcutRecorder]))
-        stack.addArrangedSubview(captionText("点击录制；录制后按此快捷键把该布局应用到最前面的窗口。Shift+Esc 清除。—— 实际清除方式：点录制后按 Esc 取消。"))
+        stack.addArrangedSubview(fieldRow([label(L("激活快捷键")), shortcutRecorder]))
+        stack.addArrangedSubview(captionText(L("点击录制；录制后按此快捷键把该布局应用到最前面的窗口。Shift+Esc 清除。—— 实际清除方式：点录制后按 Esc 取消。")))
 
         // 作用域
-        scopePopUp.addItem(withTitle: "所有屏幕")
+        scopePopUp.addItem(withTitle: L("所有屏幕"))
         scopePopUp.lastItem?.representedObject = -1
         for screen in NSScreen.screens {
             let displayID = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID) ?? 0
@@ -1194,7 +1194,7 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
         if working.scope == -1 {
             scopePopUp.selectItem(at: 0)
         }
-        stack.addArrangedSubview(fieldRow([label("可用屏幕"), scopePopUp]))
+        stack.addArrangedSubview(fieldRow([label(L("可用屏幕")), scopePopUp]))
 
         // 网格密度
         colsField.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
@@ -1205,12 +1205,12 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
         rowsField.widthAnchor.constraint(equalToConstant: 48).isActive = true
         colsField.delegate = self
         rowsField.delegate = self
-        stack.addArrangedSubview(fieldRow([label("网格密度"), label("宽"), colsField, label("× 高"), rowsField,
-                                           label("（网格越细，区域越精确）")]))
+        stack.addArrangedSubview(fieldRow([label(L("网格密度")), label(L("宽")), colsField, label(L("× 高")), rowsField,
+                                           label(L("（网格越细，区域越精确）"))]))
 
         // 屏幕布局画布
-        stack.addArrangedSubview(sectionCaption("屏幕布局"))
-        stack.addArrangedSubview(captionText("在网格上「按住拖动」画出区域；点住已画区域拖动可移动；画错点「删除所选区域」。"))
+        stack.addArrangedSubview(sectionCaption(L("屏幕布局")))
+        stack.addArrangedSubview(captionText(L("在网格上「按住拖动」画出区域；点住已画区域拖动可移动；画错点「删除所选区域」。")))
         canvas.wantsLayer = true
         canvas.layer?.borderColor = NSColor.separatorColor.cgColor
         canvas.layer?.borderWidth = 1
@@ -1237,7 +1237,7 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
         stack.setCustomSpacing(12, after: canvasRow)
 
         // 预览
-        stack.addArrangedSubview(sectionCaption("预览"))
+        stack.addArrangedSubview(sectionCaption(L("预览")))
         previewView.wantsLayer = true
         previewView.layer?.borderColor = NSColor.separatorColor.cgColor
         previewView.layer?.borderWidth = 1
@@ -1246,8 +1246,8 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
         stack.setCustomSpacing(14, after: previewView)
 
         // 取消 / 保存
-        let cancelButton = NSButton(title: "取消", target: self, action: #selector(cancelClicked))
-        let saveButton = NSButton(title: "保存", target: self, action: #selector(commitClicked))
+        let cancelButton = NSButton(title: L("取消"), target: self, action: #selector(cancelClicked))
+        let saveButton = NSButton(title: L("保存"), target: self, action: #selector(commitClicked))
         saveButton.keyEquivalent = "\r"
         saveButton.bezelStyle = .rounded
         let flexible = NSView()
@@ -1290,7 +1290,7 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
 
     /// 画布/字段 → 工作副本（提交与实时预览共用）
     private func syncWorkingFromFields() {
-        working.name = nameField.stringValue.isEmpty ? "未命名" : nameField.stringValue
+        working.name = nameField.stringValue.isEmpty ? L("未命名") : nameField.stringValue
         let cols = max(1, min(12, Int(colsField.stringValue) ?? working.cols))
         let rows = max(1, min(12, Int(rowsField.stringValue) ?? working.rows))
         if cols != working.cols || rows != working.rows {
@@ -1367,7 +1367,7 @@ extension SettingsWindowController {
         descLabel.frame = NSRect(x: 178, y: 40, width: 440, height: 16)
         cell.addSubview(descLabel)
 
-        let scopeLabel = NSTextField(labelWithString: layout.scope == -1 ? "所有屏幕" : "仅指定显示器")
+        let scopeLabel = NSTextField(labelWithString: layout.scope == -1 ? L("所有屏幕") : L("仅指定显示器"))
         scopeLabel.font = .systemFont(ofSize: 11)
         scopeLabel.textColor = .tertiaryLabelColor
         scopeLabel.frame = NSRect(x: 178, y: 20, width: 300, height: 14)

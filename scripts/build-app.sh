@@ -20,6 +20,12 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/WTidy" "$APP/Contents/MacOS/WTidy"
 cp "$ROOT/AppResources/Info.plist" "$APP/Contents/Info.plist"
 
+# 本地化语言包（英文 + 简体中文回退）
+mkdir -p "$APP/Contents/Resources/en.lproj" "$APP/Contents/Resources/zh-Hans.lproj"
+cp "$ROOT/AppResources/en.lproj/Localizable.strings" "$APP/Contents/Resources/en.lproj/" 2>/dev/null || true
+[ -f "$ROOT/AppResources/zh-Hans.lproj/Localizable.strings" ] && \
+    cp "$ROOT/AppResources/zh-Hans.lproj/Localizable.strings" "$APP/Contents/Resources/zh-Hans.lproj/" || true
+
 # 图标：优先用仓库内 AppResources/AppIcon.icns；缺失时现场生成
 ICON="$ROOT/AppResources/AppIcon.icns"
 if [ ! -f "$ICON" ]; then

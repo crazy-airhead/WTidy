@@ -348,7 +348,7 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
             }
         }
         AppLog.info("恢复所有窗口：\(restored) 个")
-        onSnapApplied?("已恢复 \(restored) 个窗口原位置")
+        onSnapApplied?(LF("已恢复 %d 个窗口原位置", restored))
     }
 
     /// 菜单「移动到活动显示器」：把前台窗口移到光标所在屏，保持相对位置与尺寸比例
@@ -359,7 +359,7 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
         guard let fromScreen = screenForWindow(win),
               let toScreen = screenForPoint(NSEvent.mouseLocation),
               screenNumber(of: fromScreen) != screenNumber(of: toScreen) else {
-            onSnapApplied?("窗口已在活动显示器上")
+            onSnapApplied?(L("窗口已在活动显示器上"))
             return false
         }
         let fromVF = fromScreen.visibleFrame
@@ -374,7 +374,7 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
         let yTop = toVF.minY + relY * toVF.height + h / 2
         let target = CGRect(x: x, y: yTop - h, width: w, height: h).intersection(toVF)
         rememberIfNeeded(win)
-        let desc = "已移动到 \(toScreen.localizedName)"
+        let desc = LF("已移动到 %@", toScreen.localizedName)
         WindowAnimator.apply(win, to: target) { [weak self] in
             AppLog.info("MOVE '\(win.title ?? "?")' → \(desc)")
             self?.onSnapApplied?(desc)
@@ -402,31 +402,31 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
 
     func zoneDisplayName(layout: TidyLayout, index: Int) -> String {
         switch (layout.id, index) {
-        case ("halves", 0): return "左半屏"
-        case ("halves", 1): return "右半屏"
-        case ("vertical", 0): return "上半屏"
-        case ("vertical", 1): return "下半屏"
-        case ("thirds", 0): return "左 1/3"
-        case ("thirds", 1): return "中 1/3"
-        case ("thirds", 2): return "右 1/3"
-        case ("narrowWide", 0): return "左 1/3"
-        case ("narrowWide", 1): return "右 2/3"
-        case ("wideNarrow", 0): return "左 2/3"
-        case ("wideNarrow", 1): return "右 1/3"
-        case ("quarters", 0): return "左上 1/4"
-        case ("quarters", 1): return "右上 1/4"
-        case ("quarters", 2): return "左下 1/4"
-        case ("quarters", 3): return "右下 1/4"
-        case ("full", _): return "最大化"
-        case ("center", _): return "居中"
+        case ("halves", 0): return L("左半屏")
+        case ("halves", 1): return L("右半屏")
+        case ("vertical", 0): return L("上半屏")
+        case ("vertical", 1): return L("下半屏")
+        case ("thirds", 0): return L("左 1/3")
+        case ("thirds", 1): return L("中 1/3")
+        case ("thirds", 2): return L("右 1/3")
+        case ("narrowWide", 0): return L("左 1/3")
+        case ("narrowWide", 1): return L("右 2/3")
+        case ("wideNarrow", 0): return L("左 2/3")
+        case ("wideNarrow", 1): return L("右 1/3")
+        case ("quarters", 0): return L("左上 1/4")
+        case ("quarters", 1): return L("右上 1/4")
+        case ("quarters", 2): return L("左下 1/4")
+        case ("quarters", 3): return L("右下 1/4")
+        case ("full", _): return L("最大化")
+        case ("center", _): return L("居中")
         default:
             if layout.regions.count > 1 {
-                // 自动分组合并的布局（id 形如 a+b，名称形如 "甲 / 乙"）：按区域取对应名称
+                // 自动分组合并的布局（id 形如 a+b，名称形如 L("甲 / 乙")）：按区域取对应名称
                 if layout.id.contains("+") {
                     let names = layout.name.components(separatedBy: " / ")
                     if names.indices.contains(index) { return names[index] }
                 }
-                return "\(layout.name) 区域\(index + 1)"
+                return LF("%1$@ 区域%2$d", layout.name, index + 1)
             }
             return layout.name
         }

@@ -16,7 +16,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 500, height: 430),
                            styleMask: [.titled, .closable],
                            backing: .buffered, defer: false)
-        win.title = "欢迎使用 WTidy"
+        win.title = L("欢迎使用 WTidy")
         win.isReleasedWhenClosed = false
         win.center()
         super.init(window: win)
@@ -24,7 +24,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         win.contentView = buildContent()
     }
 
-    required init?(coder: NSCoder) { fatalError("init(coder:) 未实现") }
+    required init?(coder: NSCoder) { fatalError(L("init(coder:) 未实现")) }
 
     func present() {
         refreshTrustUI()
@@ -66,7 +66,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
 
         let title = NSTextField(labelWithString: "WTidy")
         title.font = .systemFont(ofSize: 26, weight: .bold)
-        let subtitle = NSTextField(labelWithString: "原生重制的窗口分屏工具 · 致敬 Window Tidy")
+        let subtitle = NSTextField(labelWithString: L("原生重制的窗口分屏工具 · 致敬 Window Tidy"))
         subtitle.font = .systemFont(ofSize: 12)
         subtitle.textColor = .secondaryLabelColor
         let header = NSStackView(views: [icon, title, subtitle])
@@ -76,14 +76,14 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
 
         // 步骤卡片
         let step1 = stepRow(number: "1",
-                            title: "辅助功能权限",
-                            detail: "WTidy 靠它感知窗口拖拽、移动窗口。",
+                            title: L("辅助功能权限"),
+                            detail: L("WTidy 靠它感知窗口拖拽、移动窗口。"),
                             trailing: buildTrustControls())
         let step2 = stepRow(number: "2",
-                            title: "开机自动启动",
+                            title: L("开机自动启动"),
                             detail: LoginItemController.isAvailable
-                                ? "使用现代登录项机制，稳定随系统启动。"
-                                : "安装到 /Applications 后可启用。",
+                                ? L("使用现代登录项机制，稳定随系统启动。")
+                                : L("安装到 /Applications 后可启用。"),
                             trailing: buildLoginControls())
         // 两行同宽：徽标左对齐、trailing 控件右对齐
         NSLayoutConstraint.activate([
@@ -101,7 +101,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         card.layer?.backgroundColor = NSColor.quaternaryLabelColor.withAlphaComponent(0.12).cgColor
 
         // 完成按钮
-        doneButton = NSButton(title: "请先完成第 1 步授权", target: self, action: #selector(doneClicked))
+        doneButton = NSButton(title: L("请先完成第 1 步授权"), target: self, action: #selector(doneClicked))
         doneButton.controlSize = .large
         doneButton.bezelStyle = .rounded
         doneButton.keyEquivalent = "\r"
@@ -136,7 +136,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         trustStatusLabel = NSTextField(labelWithString: "")
         trustStatusLabel.font = .systemFont(ofSize: 12, weight: .medium)
 
-        authorizeButton = NSButton(title: "打开系统设置授权", target: self, action: #selector(authorizeClicked))
+        authorizeButton = NSButton(title: L("打开系统设置授权"), target: self, action: #selector(authorizeClicked))
 
         let box = NSStackView(views: [trustStatusLabel, authorizeButton])
         box.orientation = .vertical
@@ -188,17 +188,17 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     private func refreshTrustUI() {
         let trusted = AccessibilityService.isTrusted
         if trusted {
-            trustStatusLabel.stringValue = "✓ 已授权"
+            trustStatusLabel.stringValue = L("✓ 已授权")
             trustStatusLabel.textColor = .systemGreen
             authorizeButton.isHidden = true
             doneButton.isEnabled = true
-            doneButton.title = "开始使用"
+            doneButton.title = L("开始使用")
         } else {
-            trustStatusLabel.stringValue = "授权后此处自动打勾"
+            trustStatusLabel.stringValue = L("授权后此处自动打勾")
             trustStatusLabel.textColor = .secondaryLabelColor
             authorizeButton.isHidden = false
             doneButton.isEnabled = false
-            doneButton.title = "请先完成第 1 步授权"
+            doneButton.title = L("请先完成第 1 步授权")
         }
     }
 

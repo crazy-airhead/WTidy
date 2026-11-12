@@ -22,10 +22,10 @@ final class StatusMenuController: NSObject {
     private var hooks: Hooks?
     private var lastSnapText: String?
 
-    private let statusLine = NSMenuItem(title: "…", action: nil, keyEquivalent: "")
-    private let layoutSubmenu = NSMenuItem(title: "应用布局到前台窗口", action: nil, keyEquivalent: "")
-    private let restoreAllItem = NSMenuItem(title: "恢复所有窗口位置", action: nil, keyEquivalent: "")
-    private let moveToDisplayItem = NSMenuItem(title: "移动窗口到活动显示器", action: nil, keyEquivalent: "")
+    private let statusLine = NSMenuItem(title: L("…"), action: nil, keyEquivalent: "")
+    private let layoutSubmenu = NSMenuItem(title: L("应用布局到前台窗口"), action: nil, keyEquivalent: "")
+    private let restoreAllItem = NSMenuItem(title: L("恢复所有窗口位置"), action: nil, keyEquivalent: "")
+    private let moveToDisplayItem = NSMenuItem(title: L("移动窗口到活动显示器"), action: nil, keyEquivalent: "")
     /// attract 脉冲（对齐原版 attractState）：缺权限时图标闪烁引起注意
     private var attractTimer: Timer?
 
@@ -47,7 +47,7 @@ final class StatusMenuController: NSObject {
         layoutSubmenu.submenu = NSMenu()
         layoutSubmenu.submenu?.delegate = self
         menu.addItem(layoutSubmenu)
-        let quickItem = NSMenuItem(title: "快速布局", action: #selector(showQuickLayout), keyEquivalent: "l")
+        let quickItem = NSMenuItem(title: L("快速布局"), action: #selector(showQuickLayout), keyEquivalent: "l")
         quickItem.target = self
         menu.addItem(quickItem)
         restoreAllItem.target = self
@@ -58,10 +58,10 @@ final class StatusMenuController: NSObject {
         menu.addItem(moveToDisplayItem)
         menu.addItem(.separator())
 
-        let settingsItem = NSMenuItem(title: "设置…", action: #selector(openSettings), keyEquivalent: ",")
+        let settingsItem = NSMenuItem(title: L("设置…"), action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
-        let quitItem = NSMenuItem(title: "退出 WTidy", action: #selector(quit), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: L("退出 WTidy"), action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
 
@@ -78,23 +78,23 @@ final class StatusMenuController: NSObject {
     func update(state: State) {
         attractTimer?.invalidate()
         attractTimer = nil
-        let snapDetail = lastSnapText.map { "最近吸附：\($0)" }
+        let snapDetail = lastSnapText.map { LF("最近吸附：%@", $0) }
         switch state {
         case .ok:
             statusItem.button?.image = Self.symbolImage("rectangle.split.2x2", tint: nil, alpha: 1)
             statusItem.button?.alphaValue = 1
-            statusLine.attributedTitle = Self.dotTitle("正常监听中", color: .systemGreen,
-                                                       detail: snapDetail ?? "拖拽任意窗口顶部即可分屏")
+            statusLine.attributedTitle = Self.dotTitle(L("正常监听中"), color: .systemGreen,
+                                                       detail: snapDetail ?? L("拖拽任意窗口顶部即可分屏"))
         case .noPermission:
             statusItem.button?.image = Self.symbolImage("exclamationmark.triangle.fill", tint: .systemYellow, alpha: 1)
-            statusLine.attributedTitle = Self.dotTitle("缺少辅助功能权限", color: .systemYellow,
-                                                       detail: "点此打开系统设置授权")
+            statusLine.attributedTitle = Self.dotTitle(L("缺少辅助功能权限"), color: .systemYellow,
+                                                       detail: L("点此打开系统设置授权"))
             startAttractPulse()
         case .paused:
             statusItem.button?.image = Self.symbolImage("rectangle.split.2x2", tint: nil, alpha: 0.35)
             statusItem.button?.alphaValue = 1
-            statusLine.attributedTitle = Self.dotTitle("拖拽分屏已暂停", color: .systemGray,
-                                                       detail: "在设置中重新开启")
+            statusLine.attributedTitle = Self.dotTitle(L("拖拽分屏已暂停"), color: .systemGray,
+                                                       detail: L("在设置中重新开启"))
         }
     }
 
@@ -158,7 +158,7 @@ final class StatusMenuController: NSObject {
         let para = NSMutableParagraphStyle()
         para.lineBreakMode = .byTruncatingTail
         let s = NSMutableAttributedString()
-        s.append(NSAttributedString(string: "● ", attributes: [
+        s.append(NSAttributedString(string: L("● "), attributes: [
             .foregroundColor: color, .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
             .paragraphStyle: para,
         ]))
@@ -190,7 +190,7 @@ extension StatusMenuController: NSMenuDelegate {
         let layouts = LayoutStore.displayLayouts(for: nil)
         let trusted = AccessibilityService.isTrusted
         if layouts.isEmpty {
-            let empty = NSMenuItem(title: "（无布局，请在设置的「布局」页添加）", action: nil, keyEquivalent: "")
+            let empty = NSMenuItem(title: L("（无布局，请在设置的「布局」页添加）"), action: nil, keyEquivalent: "")
             empty.isEnabled = false
             menu.addItem(empty)
             return
@@ -216,7 +216,7 @@ extension StatusMenuController: NSMenuDelegate {
             menu.addItem(item)
         }
         menu.addItem(.separator())
-        let manage = NSMenuItem(title: "管理布局…", action: #selector(openSettings), keyEquivalent: "")
+        let manage = NSMenuItem(title: L("管理布局…"), action: #selector(openSettings), keyEquivalent: "")
         manage.target = self
         menu.addItem(manage)
     }

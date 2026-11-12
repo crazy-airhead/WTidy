@@ -2,6 +2,12 @@
 
 原生重制的 macOS 窗口分屏工具，致敬 [Window Tidy](https://apps.apple.com/app/window-tidy/id449515544)（Light Pillar, 2011–2017）。
 
+**English / 中文**：界面跟随系统语言自动切换（简体中文 / English）。
+
+## License / 开源协议
+
+[Apache License 2.0](LICENSE)
+
 原版是 2017 年的 x86_64 应用：登录自启在 macOS 26/27 的 BTM 下早已失效，拖拽监听在睡眠唤醒 / 显示器插拔后会静默失灵且无法自愈，还依赖正在被淘汰的 Rosetta 2。WTidy 用 Swift + AppKit 原生重写，专治这三个病根。
 
 ## 功能
@@ -103,4 +109,4 @@ Tests/WTidyTests/  # 几何与映射的 15 项 swift-testing 测试
 
 ## License
 
-MIT。向 Window Tidy 的开发者 [Light Pillar](https://lightpillar.com) 致敬。
+[Apache License 2.0](LICENSE)。向 Window Tidy 的开发者 [Light Pillar](https://lightpillar.com) 致敬。

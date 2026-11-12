@@ -20,18 +20,18 @@ enum SnapAction: String, CaseIterable {
 
     var displayName: String {
         switch self {
-        case .leftHalf: return "左半屏"
-        case .rightHalf: return "右半屏"
-        case .topHalf: return "上半屏"
-        case .bottomHalf: return "下半屏"
-        case .leftThird: return "左 1/3"
-        case .middleThird: return "中 1/3"
-        case .rightThird: return "右 1/3"
-        case .twoThirdsLeft: return "左 2/3"
-        case .twoThirdsRight: return "右 2/3"
-        case .maximize: return "最大化"
-        case .center: return "居中"
-        case .restore: return "恢复位置"
+        case .leftHalf: return L("左半屏")
+        case .rightHalf: return L("右半屏")
+        case .topHalf: return L("上半屏")
+        case .bottomHalf: return L("下半屏")
+        case .leftThird: return L("左 1/3")
+        case .middleThird: return L("中 1/3")
+        case .rightThird: return L("右 1/3")
+        case .twoThirdsLeft: return L("左 2/3")
+        case .twoThirdsRight: return L("右 2/3")
+        case .maximize: return L("最大化")
+        case .center: return L("居中")
+        case .restore: return L("恢复位置")
         }
     }
 
@@ -67,10 +67,10 @@ enum SnapAction: String, CaseIterable {
     var keyDescription: String {
         let base: String
         switch self {
-        case .leftHalf: base = "←"
-        case .rightHalf: base = "→"
-        case .topHalf: base = "↑"
-        case .bottomHalf: base = "↓"
+        case .leftHalf: base = L("←")
+        case .rightHalf: base = L("→")
+        case .topHalf: base = L("↑")
+        case .bottomHalf: base = L("↓")
         case .leftThird: base = "["
         case .middleThird: base = "\\"
         case .rightThird: base = "]"
@@ -80,9 +80,9 @@ enum SnapAction: String, CaseIterable {
         case .center: base = "C"
         case .restore: base = "Z"
         }
-        let ctrl = defaultModifiers & controlKey != 0 ? "⌃" : ""
-        let opt = defaultModifiers & optionKey != 0 ? "⌥" : ""
-        let cmd = defaultModifiers & cmdKey != 0 ? "⌘" : ""
+        let ctrl = defaultModifiers & controlKey != 0 ? L("⌃") : ""
+        let opt = defaultModifiers & optionKey != 0 ? L("⌥") : ""
+        let cmd = defaultModifiers & cmdKey != 0 ? L("⌘") : ""
         return ctrl + opt + cmd + base
     }
 }
