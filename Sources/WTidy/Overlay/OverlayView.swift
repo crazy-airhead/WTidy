@@ -90,28 +90,34 @@ final class OverlayView: NSView {
     override var isFlipped: Bool { true }
 
     override func draw(_ dirtyRect: NSRect) {
-        // 展开态：整屏暗纱 + 落点分区
-        if let veil = model.veilRect {
-            let v = convert(veil)
-            NSColor.black.withAlphaComponent(0.18).setFill()
-            v.fill()
-
+        // 展开态：不加整屏蒙板，只画分区边框；选中的区域整体高亮填充。
+        // 边框用「深色外圈 + 白色内线」双层描边，浅色/深色桌面内容上都清晰可辨。
+        if model.veilRect != nil {
             for (i, zone) in model.zones.enumerated() {
                 let z = convert(zone)
                 let hovered = (i == model.hoveredZoneIndex)
                 let path = NSBezierPath(roundedRect: z.insetBy(dx: 3, dy: 3), xRadius: 10, yRadius: 10)
                 if hovered {
-                    NSColor.controlAccentColor.withAlphaComponent(0.34).setFill()
+                    NSColor.controlAccentColor.withAlphaComponent(0.35).setFill()
                     path.fill()
-                    NSColor.white.withAlphaComponent(0.95).setStroke()
-                    path.lineWidth = 3
+                    // 选中区：白色主边 + 深色外衬
+                    let outer = NSBezierPath(roundedRect: z.insetBy(dx: 2, dy: 2), xRadius: 10, yRadius: 10)
+                    NSColor.black.withAlphaComponent(0.45).setStroke()
+                    outer.lineWidth = 4
+                    outer.stroke()
+                    NSColor.white.withAlphaComponent(0.98).setStroke()
+                    path.lineWidth = 2.5
+                    path.stroke()
                 } else {
-                    NSColor.white.withAlphaComponent(0.07).setFill()
-                    path.fill()
-                    NSColor.white.withAlphaComponent(0.7).setStroke()
-                    path.lineWidth = 2
+                    // 未选中区：仅边框（深色外衬 + 白色内线），不填充
+                    let outer = NSBezierPath(roundedRect: z.insetBy(dx: 2, dy: 2), xRadius: 10, yRadius: 10)
+                    NSColor.black.withAlphaComponent(0.40).setStroke()
+                    outer.lineWidth = 3.5
+                    outer.stroke()
+                    NSColor.white.withAlphaComponent(0.85).setStroke()
+                    path.lineWidth = 1.5
+                    path.stroke()
                 }
-                path.stroke()
             }
         }
 
