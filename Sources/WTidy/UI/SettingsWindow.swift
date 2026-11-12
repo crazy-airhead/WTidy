@@ -800,9 +800,20 @@ final class ScreenPositionPreviewView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        // 迷你屏幕（默认坐标，原点左下，与 StripGeometry 一致）
-        // 底色 = 浅蓝壁纸渐变（对齐原版 Screen position 的迷你屏观感）
-        let screen = bounds.insetBy(dx: 10, dy: 10)
+        // 迷你屏幕按「真实主屏可见区」的尺寸与宽高比等比缩放绘制——
+        // 预览即真实：这里看到的图标占比与实际屏幕完全一致
+        let vf = NSScreen.main?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1512, height: 982)
+        let availW = bounds.width - 20
+        let availH = bounds.height - 20
+        var w = availW
+        var h = w * vf.height / vf.width
+        if h > availH {
+            h = availH
+            w = h * vf.width / vf.height
+        }
+        let screen = NSRect(x: bounds.midX - w / 2, y: bounds.midY - h / 2, width: w, height: h)
+        let k = screen.width / vf.width   // 预览像素 / 实际点
+
         let path = NSBezierPath(roundedRect: screen, xRadius: 10, yRadius: 10)
         NSGraphicsContext.saveGraphicsState()
         path.addClip()
@@ -815,14 +826,9 @@ final class ScreenPositionPreviewView: NSView {
         path.lineWidth = 1
         path.stroke()
 
-        // 虚拟屏幕宽 900pt：让图标在预览里足够大（对齐原版预览中图标的大小编感）
-        let virtualWidth: CGFloat = 900
-        let k = screen.width / virtualWidth
-        let virtualVF = CGRect(x: 0, y: 0, width: virtualWidth, height: screen.height / k)
-
         switch mode {
         case .strip:
-            let rects = StripGeometry.iconRects(layoutCount: LayoutStore.layouts.count, in: virtualVF)
+            let rects = StripGeometry.iconRects(layoutCount: LayoutStore.layouts.count, in: vf)
             let layouts = LayoutStore.layouts
             for (i, r) in rects.enumerated() where layouts.indices.contains(i) {
                 let viewRect = CGRect(x: screen.minX + r.minX * k,
