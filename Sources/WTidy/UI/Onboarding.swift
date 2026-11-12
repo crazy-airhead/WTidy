@@ -85,9 +85,15 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
                                 ? "使用现代登录项机制，稳定随系统启动。"
                                 : "安装到 /Applications 后可启用。",
                             trailing: buildLoginControls())
+        // 两行同宽：徽标左对齐、trailing 控件右对齐
+        NSLayoutConstraint.activate([
+            step1.widthAnchor.constraint(equalToConstant: 398),
+            step2.widthAnchor.constraint(equalToConstant: 398),
+        ])
 
         let card = NSStackView(views: [step1, step2])
         card.orientation = .vertical
+        card.alignment = .leading   // ①② 步骤条左对齐（默认 centerX 会因行宽不同而错位）
         card.spacing = 16
         card.edgeInsets = NSEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
         card.wantsLayer = true
