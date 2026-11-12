@@ -29,8 +29,8 @@ struct SettingsRenderTests {
         // tab 高度 = 窗口内容高 − 底部原版式底栏（46pt 栏 + 上下 16pt 间距）
         #expect(abs(tab.frame.height - (bounds.height - 62)) < 1,
                 "tab 容器高度应占据底栏以上区域：\(tab.frame) vs \(bounds)")
-        #expect(tab.tabViewItems.count == 6, "布局/行为/定位/快速布局/快捷键/关于")
-        #expect(tab.tabViewItems.map(\.label) == ["布局", "行为", "定位", "快速布局", "快捷键", "关于"])
+        #expect(tab.tabViewItems.count == 5, "布局/行为/定位/快速布局/关于");
+        #expect(tab.tabViewItems.map(\.label) == ["布局", "行为", "定位", "快速布局", "关于"])
 
         // 注意：AppKit frame 坐标原点在左下角——顶对齐的视图 maxY ≈ 容器高度。
         // NSStackView 自身 flipped，绘制自顶向下；frame 仍在容器坐标系里。
@@ -58,19 +58,14 @@ struct SettingsRenderTests {
             #expect(inner.count >= 2, "行为分组框内应含 ⌥ 单选等开关，实际 \(inner.count) 个按钮")
         }
 
-        // 4) 快捷键页应有 12 行且不塌陷（需先选中该 tab 才会布局）
-        tab.selectTabViewItem(at: 4)
-        win.contentView?.layoutSubtreeIfNeeded()
-        let hotkeys = tab.tabViewItems[4].view!
-        guard let hkStack = hotkeys.subviews.compactMap({ $0 as? NSStackView }).first else {
-            Issue.record("快捷键页找不到布局栈")
-            return
-        }
-        let rows = hkStack.arrangedSubviews.filter { $0 is NSStackView }
-        #expect(rows.count == 12, "应有 12 行快捷键，实际 \(rows.count)")
-        #expect(hkStack.frame.height > 250, "快捷键栈不应塌陷，实际 \(hkStack.frame.height)")
-        #expect(abs(hkStack.frame.maxY - hotkeys.bounds.height) < 30, "快捷键栈应顶对齐，实际 \(hkStack.frame)")
+        // 4) 快捷键设置已并入布局体系：布局页应包含布局列表表格（滚动视图内）
         tab.selectTabViewItem(at: 0)
+        win.contentView?.layoutSubtreeIfNeeded()
+        let layoutsPage = tab.tabViewItems[0].view!
+        func hasTableView(_ v: NSView) -> Bool {
+            v is NSTableView || v.subviews.contains(where: hasTableView)
+        }
+        #expect(hasTableView(layoutsPage), "布局页应包含布局列表表格")
 
         // 离屏渲染 PNG 存档（人工复核定位用；文字渲染缺失是离屏局限）
         if let rep = content.bitmapImageRepForCachingDisplay(in: bounds),

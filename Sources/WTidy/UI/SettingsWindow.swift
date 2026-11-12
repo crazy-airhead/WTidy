@@ -19,7 +19,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     private let gapSegment = NSSegmentedControl(labels: [L("贴合"), "4pt", "8pt", "12pt"],
                                                 trackingMode: .selectOne, target: nil, action: nil)
     private let permissionRow = NSStackView()
-    private var hotkeyToggles: [NSButton] = []
 
     override init() {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 760),
@@ -39,7 +38,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         tabView.addTabViewItem(optionsTab())
         tabView.addTabViewItem(positioningTab())
         tabView.addTabViewItem(quickLayoutTab())
-        tabView.addTabViewItem(hotkeysTab())
         tabView.addTabViewItem(aboutTab())
 
         // 底部栏。窗口固定尺寸不可缩放，全部用静态 frame（零 Auto Layout，
@@ -102,7 +100,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         let (content, stack) = makePage()
         stack.spacing = 8
 
-        let caption = captionText(L("拖动可更改布局顺序，双击某行编辑其设置。图标条按此列表顺序展示。"))
+        let caption = captionText(L("拖动可更改布局顺序，双击编辑；双击后可在编辑器里为布局录制专属激活快捷键。固定方向快捷键（⌥⌘←/→ 等）始终可用。"))
         stack.addArrangedSubview(caption)
         stack.setCustomSpacing(10, after: caption)
 
@@ -509,36 +507,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         return item
     }
 
-    private func hotkeysTab() -> NSTabViewItem {
-        let (content, stack) = makePage()
-        stack.spacing = 6
-
-        for action in SnapAction.allCases {
-            let name = NSTextField(labelWithString: action.displayName)
-            name.font = .systemFont(ofSize: 12)
-            let badge = keyBadge(action.keyDescription)
-            let toggle = NSButton(checkboxWithTitle: "", target: self, action: #selector(toggleHotkeyRow(_:)))
-            toggle.identifier = NSUserInterfaceItemIdentifier(action.rawValue)
-            hotkeyToggles.append(toggle)
-
-            let flexible = NSView()
-            let row = NSStackView(views: [name, flexible, badge, toggle])
-            row.orientation = .horizontal
-            row.spacing = 8
-            row.translatesAutoresizingMaskIntoConstraints = false
-            row.widthAnchor.constraint(equalToConstant: 500).isActive = true
-            flexible.setContentHuggingPriority(.defaultLow, for: .horizontal)
-            stack.addArrangedSubview(row)
-        }
-        stack.setCustomSpacing(16, after: stack.arrangedSubviews.last!)
-        stack.addArrangedSubview(captionText(L("快捷键与拖拽分屏互为补充；某些应用不支持拖拽感知时，快捷键仍可分屏。")))
-
-        let item = NSTabViewItem(identifier: "hotkeys")
-        item.label = L("快捷键")
-        item.view = content
-        return item
-    }
-
     private func aboutTab() -> NSTabViewItem {
         let content = NSView(frame: NSRect(x: 0, y: 0, width: 580, height: 512))
 
@@ -622,10 +590,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         default: gapSegment.selectedSegment = -1
         }
         permissionRow.isHidden = AccessibilityService.isTrusted
-        for toggle in hotkeyToggles {
-            guard let id = toggle.identifier?.rawValue else { continue }
-            toggle.state = Prefs.hotkeyEnabled(id) ? .on : .off
-        }
 
         // 行为页
         optionHideRadio.state = Prefs.optionKeyMode == 0 ? .on : .off
@@ -671,10 +635,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     @objc private func toggleLogin() {
         LoginItemController.setEnabled(loginCheck.state == .on)
         loginCheck.state = LoginItemController.isEnabled ? .on : .off
-    }
-    @objc private func toggleHotkeyRow(_ sender: NSButton) {
-        guard let id = sender.identifier?.rawValue else { return }
-        Prefs.setHotkeyEnabled(sender.state == .on, id: id)
     }
     @objc private func gapChanged() {
         switch gapSegment.selectedSegment {
@@ -1371,6 +1331,13 @@ extension SettingsWindowController {
         scopeLabel.textColor = .tertiaryLabelColor
         scopeLabel.frame = NSRect(x: 178, y: 20, width: 300, height: 14)
         cell.addSubview(scopeLabel)
+
+        // 已录制的激活快捷键徽章
+        if let kc = layout.activationKeyCode, kc > 0, let mods = layout.activationModifiers {
+            let shortcutBadge = keyBadge(SettingsWindowController.hotkeyDisplay(keyCode: UInt32(kc), modifiers: mods))
+            shortcutBadge.frame = NSRect(x: 480, y: 40, width: 140, height: 18)
+            cell.addSubview(shortcutBadge)
+        }
 
         return cell
     }
