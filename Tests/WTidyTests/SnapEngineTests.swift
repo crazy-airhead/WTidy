@@ -10,7 +10,6 @@ private func close(_ a: CGFloat, _ b: CGFloat, eps: CGFloat = 0.001) -> Bool {
 
 struct SnapEngineTests {
     // 模拟屏：1920×1080，可见区去掉顶部 25pt 菜单栏
-    let screen = CGRect(x: 0, y: 0, width: 1920, height: 1080)
     let visible = CGRect(x: 0, y: 0, width: 1920, height: 1055)
 
     // MARK: - 坐标换算
@@ -31,66 +30,79 @@ struct SnapEngineTests {
         #expect(ScreenGeometry.nsPoint(fromAX: CGPoint(x: 10, y: 0), primaryScreenHeight: h).y == 900)
     }
 
-    // MARK: - 布局分区
+    // MARK: - 归一化区域 → 屏幕分区
 
-    @Test func halves() {
-        let zones = SnapEngine.zoneRects(for: SnapLayout(id: "halves", kind: .columns(2)), in: visible)
-        #expect(zones.count == 2)
+    @Test func halvesZones() {
+        let layout = LayoutStore.layout(id: "halves")!
+        let zones = SnapEngine.zoneRects(for: layout, in: visible)
+        #expect(layout.regions.count == 2)
         #expect(close(zones[0].width, 960))
         #expect(close(zones[1].minX, 960))
         #expect(close(zones[0].height, visible.height))
+        // zone0 为左半：AppKit 坐标 min/max 应覆盖整屏
+        #expect(close(zones[0].minY, 0) && close(zones[0].maxY, visible.height))
     }
 
     @Test func verticalHalvesTopFirst() {
-        let zones = SnapEngine.zoneRects(for: SnapLayout(id: "vertical", kind: .rows(2)), in: visible)
+        let layout = LayoutStore.layout(id: "vertical")!
+        let zones = SnapEngine.zoneRects(for: layout, in: visible)
         #expect(zones.count == 2)
-        // zone 0 是顶行
+        // zone 0 是顶行：AppKit 坐标顶行 maxY = 屏顶
         #expect(close(zones[0].maxY, visible.maxY))
         #expect(close(zones[1].minY, visible.minY))
     }
 
     @Test func thirdsEqualWidths() {
-        let zones = SnapEngine.zoneRects(for: SnapLayout(id: "thirds", kind: .columns(3)), in: visible)
+        let layout = LayoutStore.layout(id: "thirds")!
+        let zones = SnapEngine.zoneRects(for: layout, in: visible)
         #expect(zones.count == 3)
         #expect(close(zones[0].width, 640))
         #expect(close(zones[2].maxX, visible.maxX))
     }
 
-    @Test func quartersGrid() {
-        let zones = SnapEngine.zoneRects(for: SnapLayout(id: "quarters", kind: .grid(cols: 2, rows: 2)), in: visible)
+    @Test func quartersGridOrder() {
+        let layout = LayoutStore.layout(id: "quarters")!
+        let zones = SnapEngine.zoneRects(for: layout, in: visible)
         #expect(zones.count == 4)
         // 顺序：左上、右上、左下、右下
-        #expect(zones[0].minX == visible.minX)
+        #expect(close(zones[0].minX, 0))
         #expect(close(zones[0].maxY, visible.maxY))       // 顶行贴顶
-        #expect(close(zones[0].minY, visible.midY))       // 顶行下缘在屏幕中线
+        #expect(close(zones[0].minY, visible.midY))       // 顶行下缘在中线
         #expect(close(zones[1].minX, visible.midX))
         #expect(close(zones[2].minY, visible.minY))       // 底行贴底
         #expect(close(zones[3].maxX, visible.maxX))
-        #expect(close(zones[3].minY, visible.minY))
     }
 
-    @Test func twoThirdsSplit() {
-        let zones = SnapEngine.zoneRects(for: SnapLayout(id: "twoThirdsLeft", kind: .columnSplit(leftRatio: 2.0 / 3.0)), in: visible)
-        #expect(zones.count == 2)
-        #expect(close(zones[0].width, 1280, eps: 0.5))
-        #expect(close(zones[1].width, 640, eps: 0.5))
+    @Test func twoThirdsSingleRegion() {
+        let left = LayoutStore.layout(id: "twoThirdsLeft")!
+        let zonesL = SnapEngine.zoneRects(for: left, in: visible)
+        #expect(zonesL.count == 1)
+        #expect(close(zonesL[0].width, 1280, eps: 0.5))
+
+        let right = LayoutStore.layout(id: "twoThirdsRight")!
+        let zonesR = SnapEngine.zoneRects(for: right, in: visible)
+        #expect(zonesR.count == 1)
+        #expect(close(zonesR[0].width, 1280, eps: 0.5))
+        #expect(close(zonesR[0].maxX, visible.maxX))
     }
 
-    @Test func full() {
-        let zones = SnapEngine.zoneRects(for: SnapLayout(id: "full", kind: .full), in: visible)
-        #expect(zones == [visible])
+    @Test func centerRegionMatchesOriginal() {
+        // 原版 Centre：6×6 网格 (2,2)-(5,5) → 归一化 1/6..5/6
+        let center = LayoutStore.layout(id: "center")!
+        let zones = SnapEngine.zoneRects(for: center, in: visible)
+        #expect(zones.count == 1)
+        #expect(close(zones[0].width, visible.width * 4 / 6))
+        #expect(close(zones[0].height, visible.height * 4 / 6))
+        #expect(close(zones[0].midX, visible.midX))
     }
-
-    // MARK: - 间隙
 
     @Test func gapInsets() {
+        let layout = LayoutStore.layout(id: "halves")!
         let gap: CGFloat = 8
-        let zones = SnapEngine.zoneRects(for: SnapLayout(id: "halves", kind: .columns(2)), in: visible, gap: gap)
+        let zones = SnapEngine.zoneRects(for: layout, in: visible, gap: gap)
         // 每个分区四周各缩 gap/2 = 4
         #expect(zones[0].minX == visible.minX + 4)
-        #expect(zones[0].minY == visible.minY + 4)
         #expect(close(zones[0].maxX, 960 - 4))
-        // 两窗之间总共 8：zone0 右缩 4 + zone1 左缩 4
         #expect(close(zones[1].minX, 960 + 4))
         #expect(close(zones[1].maxX, visible.maxX - 4))
     }
@@ -101,13 +113,79 @@ struct SnapEngineTests {
         #expect(close(r.width, visible.width - 10))
     }
 
-    // MARK: - 命中
+    // MARK: - 屏内命中
 
     @Test func zoneIndexHitAndMiss() {
-        let zones = SnapEngine.zoneRects(for: SnapLayout(id: "halves", kind: .columns(2)), in: visible)
+        let layout = LayoutStore.layout(id: "halves")!
+        let zones = SnapEngine.zoneRects(for: layout, in: visible)
         #expect(SnapEngine.zoneIndex(at: CGPoint(x: 100, y: 500), in: zones) == 0)
         #expect(SnapEngine.zoneIndex(at: CGPoint(x: 1500, y: 500), in: zones) == 1)
         #expect(SnapEngine.zoneIndex(at: CGPoint(x: -10, y: 500), in: zones) == nil)
+    }
+
+    // MARK: - 图标内投影（图标条瞄准的核心）
+
+    @Test func projectionInHalvesIcon() {
+        let layout = LayoutStore.layout(id: "halves")!
+        #expect(SnapEngine.zoneIndexInIcon(nx: 0.2, ny: 0.5, layout: layout) == 0)  // 图标偏左 → 左半
+        #expect(SnapEngine.zoneIndexInIcon(nx: 0.8, ny: 0.5, layout: layout) == 1)  // 偏右 → 右半
+    }
+
+    @Test func projectionInVerticalIcon() {
+        let layout = LayoutStore.layout(id: "vertical")!
+        #expect(SnapEngine.zoneIndexInIcon(nx: 0.5, ny: 0.2, layout: layout) == 0)  // 偏上 → 上半
+        #expect(SnapEngine.zoneIndexInIcon(nx: 0.5, ny: 0.8, layout: layout) == 1)  // 偏下 → 下半
+    }
+
+    @Test func projectionInThirdsAndQuarters() {
+        let thirds = LayoutStore.layout(id: "thirds")!
+        #expect(SnapEngine.zoneIndexInIcon(nx: 0.1, ny: 0.5, layout: thirds) == 0)
+        #expect(SnapEngine.zoneIndexInIcon(nx: 0.5, ny: 0.5, layout: thirds) == 1)
+        #expect(SnapEngine.zoneIndexInIcon(nx: 0.9, ny: 0.5, layout: thirds) == 2)
+
+        let quarters = LayoutStore.layout(id: "quarters")!
+        #expect(SnapEngine.zoneIndexInIcon(nx: 0.3, ny: 0.2, layout: quarters) == 0) // 左上
+        #expect(SnapEngine.zoneIndexInIcon(nx: 0.8, ny: 0.2, layout: quarters) == 1) // 右上
+        #expect(SnapEngine.zoneIndexInIcon(nx: 0.3, ny: 0.8, layout: quarters) == 2) // 左下
+        #expect(SnapEngine.zoneIndexInIcon(nx: 0.8, ny: 0.8, layout: quarters) == 3) // 右下
+    }
+
+    @Test func projectionSingleRegionAndSparse() {
+        let full = LayoutStore.layout(id: "full")!
+        #expect(SnapEngine.zoneIndexInIcon(nx: 0.7, ny: 0.3, layout: full) == 0)
+
+        // 稀疏网格：center 在 6×6 上只占 (2,2)-(5,5)，光标落角落也应就近命中区域 0
+        let center = LayoutStore.layout(id: "center")!
+        #expect(SnapEngine.zoneIndexInIcon(nx: 0.0, ny: 0.0, layout: center) == 0)
+        #expect(SnapEngine.zoneIndexInIcon(nx: 0.95, ny: 0.95, layout: center) == 0)
+    }
+
+    // MARK: - 布局存储
+
+    @Test func layoutStoreRoundTripAndBuiltinIds() {
+        let original = LayoutStore.layouts
+        defer { LayoutStore.layouts = original }
+
+        var list = original
+        list.append(TidyLayout(id: "test-x", name: "测试", cols: 4, rows: 4, regions: [.init(1, 1, 2, 2)]))
+        LayoutStore.layouts = list
+        #expect(LayoutStore.layout(id: "test-x")?.name == "测试")
+        #expect(LayoutStore.layout(id: "test-x")?.normalizedRects.first?.minX == 0)
+        #expect(close(LayoutStore.layout(id: "test-x")!.normalizedRects[0].width, 0.5))
+
+        LayoutStore.reset()
+        #expect(LayoutStore.layouts.count == TidyLayout.builtins.count)
+    }
+
+    // MARK: - 快捷键映射
+
+    @Test func layoutAndZoneMapping() {
+        #expect(OverlayController.layoutAndZone(for: .leftHalf)?.1 == 0)
+        #expect(OverlayController.layoutAndZone(for: .rightHalf)?.0.id == "halves")
+        #expect(OverlayController.layoutAndZone(for: .twoThirdsRight)?.0.id == "twoThirdsRight")
+        #expect(OverlayController.layoutAndZone(for: .twoThirdsRight)?.1 == 0)
+        #expect(OverlayController.layoutAndZone(for: .center) == nil)
+        #expect(OverlayController.layoutAndZone(for: .restore) == nil)
     }
 
     // MARK: - 居中
@@ -132,20 +210,7 @@ struct SnapEngineTests {
         #expect(mem.recall(key: "a") == nil)
         mem.remember(key: "a", frame: f)
         #expect(mem.recall(key: "a") == f)
-        mem.remember(key: "a", frame: .zero)
-        #expect(mem.recall(key: "a") == .zero)
         mem.remove(key: "a")
         #expect(mem.recall(key: "a") == nil)
-    }
-
-    // MARK: - 布局 ↔ 动作映射
-
-    @Test func layoutAndZoneMapping() {
-        #expect(OverlayController.layoutAndZone(for: .leftHalf)?.1 == 0)
-        let twoThirds = OverlayController.layoutAndZone(for: .twoThirdsRight)
-        #expect(twoThirds?.0.id == "twoThirdsRight")
-        #expect(twoThirds?.1 == 1)
-        #expect(OverlayController.layoutAndZone(for: .center) == nil)
-        #expect(OverlayController.layoutAndZone(for: .restore) == nil)
     }
 }

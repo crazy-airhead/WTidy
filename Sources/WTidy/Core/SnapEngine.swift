@@ -26,97 +26,53 @@ enum ScreenGeometry {
     }
 }
 
-// MARK: - 分屏布局
-
-struct SnapLayout: Equatable {
-    enum Kind: Equatable {
-        case columns(Int)          // n 等分竖列（2 = 左右半，3 = 三等分）
-        case rows(Int)             // n 等分横行（2 = 上下半）
-        case grid(cols: Int, rows: Int) // 网格（2x2 = 四分）
-        case columnSplit(leftRatio: CGFloat) // 不等双列（2/3+1/3 等）
-        case full
-    }
-
-    let id: String
-    let kind: Kind
-    var zoneCount: Int {
-        switch kind {
-        case .columns(let n): return n
-        case .rows(let n): return n
-        case .grid(let c, let r): return c * r
-        case .columnSplit: return 2
-        case .full: return 1
-        }
-    }
-
-    /// 顶部缩略图条里展示的布局（顺序即展示顺序）
-    static let strip: [SnapLayout] = [
-        SnapLayout(id: "halves", kind: .columns(2)),        // 左右半
-        SnapLayout(id: "vertical", kind: .rows(2)),         // 上下半
-        SnapLayout(id: "thirds", kind: .columns(3)),        // 三等分
-        SnapLayout(id: "twoThirdsLeft", kind: .columnSplit(leftRatio: 2.0 / 3.0)),
-        SnapLayout(id: "twoThirdsRight", kind: .columnSplit(leftRatio: 1.0 / 3.0)),
-        SnapLayout(id: "quarters", kind: .grid(cols: 2, rows: 2)),
-        SnapLayout(id: "full", kind: .full),
-    ]
-}
-
-// MARK: - 布局引擎
+// MARK: - 布局引擎（基于 TidyLayout 的归一化区域）
 
 enum SnapEngine {
-    /// 计算某布局在某屏幕可用区域内的所有分区矩形（AppKit 全局坐标）。
+    /// 归一化区域矩形（原点左上 0..1）→ 屏幕可用区域内的分区矩形（AppKit 全局坐标）。
     /// gap：相邻窗口间隙；每个分区向内收缩 gap/2，再裁剪回屏幕区域。
-    static func zoneRects(for layout: SnapLayout, in screen: CGRect, gap: CGFloat = 0) -> [CGRect] {
+    static func zoneRects(normalized rects: [CGRect], in screen: CGRect, gap: CGFloat = 0) -> [CGRect] {
         let inset = max(0, gap) / 2
-        func clamp(_ r: CGRect) -> CGRect {
+        return rects.map { nr in
+            let w = nr.width * screen.width
+            let h = nr.height * screen.height
+            let x = screen.minX + nr.minX * screen.width
+            let top = screen.maxY - nr.minY * screen.height   // nr 原点在左上
+            let r = CGRect(x: x, y: top - h, width: w, height: h)
             let i = r.insetBy(dx: inset, dy: inset)
             guard !i.isNull, i.width > 0, i.height > 0 else { return .null }
             return i.intersection(screen)
         }
+    }
 
-        switch layout.kind {
-        case .columns(let n):
-            guard n > 0 else { return [] }
-            let w = screen.width / CGFloat(n)
-            return (0..<n).map { clamp(CGRect(x: screen.minX + w * CGFloat($0), y: screen.minY, width: w, height: screen.height)) }
-
-        case .rows(let n):
-            guard n > 0 else { return [] }
-            let hgt = screen.height / CGFloat(n)
-            return (0..<n).map {
-                // rows(0) 是顶行
-                CGRect(x: screen.minX, y: screen.maxY - hgt * CGFloat($0 + 1), width: screen.width, height: hgt)
-            }.map(clamp)
-
-        case .grid(let c, let r):
-            guard c > 0, r > 0 else { return [] }
-            let w = screen.width / CGFloat(c)
-            let hgt = screen.height / CGFloat(r)
-            var rects: [CGRect] = []
-            for row in 0..<r {
-                for col in 0..<c {
-                    rects.append(CGRect(x: screen.minX + w * CGFloat(col),
-                                        y: screen.maxY - hgt * CGFloat(row + 1),
-                                        width: w, height: hgt))
-                }
-            }
-            return rects.map(clamp)
-
-        case .columnSplit(let leftRatio):
-            let w = screen.width * leftRatio
-            return [
-                clamp(CGRect(x: screen.minX, y: screen.minY, width: w, height: screen.height)),
-                clamp(CGRect(x: screen.minX + w, y: screen.minY, width: screen.width - w, height: screen.height)),
-            ]
-
-        case .full:
-            return [clamp(screen)]
-        }
+    /// 计算某布局在某屏幕可用区域内的分区（AppKit 全局坐标）
+    static func zoneRects(for layout: TidyLayout, in screen: CGRect, gap: CGFloat = 0) -> [CGRect] {
+        zoneRects(normalized: layout.normalizedRects, in: screen, gap: gap)
     }
 
     /// 点命中了哪个分区（从前往后，避免间隙处命中）
     static func zoneIndex(at point: CGPoint, in zones: [CGRect]) -> Int? {
         zones.firstIndex { !$0.isNull && $0.contains(point) }
+    }
+
+    /// 图标内投影选区：光标在布局缩略图内的归一化位置 (nx, ny)（原点左上）
+    /// → 折算到布局网格单元 → 命中的区域下标（稀疏网格取最近区域）。
+    /// 这是「图标条内瞄准」的核心：比如左右半屏图标，光标偏左高亮左半，偏右高亮右半。
+    static func zoneIndexInIcon(nx: CGFloat, ny: CGFloat, layout: TidyLayout) -> Int? {
+        guard layout.cols > 0, layout.rows > 0, !layout.regions.isEmpty else { return nil }
+        let cx = min(layout.cols, max(1, Int(nx * CGFloat(layout.cols)) + 1))
+        let cy = min(layout.rows, max(1, Int(ny * CGFloat(layout.rows)) + 1))
+        if let i = layout.regions.firstIndex(where: { $0.contains(cellX: cx, cellY: cy) }) {
+            return i
+        }
+        var best: (index: Int, distance: Int)? = nil
+        for (i, r) in layout.regions.enumerated() {
+            let d = r.distance(toCellX: cx, cellY: cy)
+            if best == nil || d < best!.distance {
+                best = (i, d)
+            }
+        }
+        return best?.index
     }
 
     /// 保持窗口尺寸居中（用于「居中」动作），必要时缩到屏幕内
@@ -129,9 +85,9 @@ enum SnapEngine {
                       width: sz.width, height: sz.height).integral
     }
 
-    /// 「最大化」（非全屏）：铺满 visibleFrame，等价 full 布局
+    /// 「最大化」（非全屏）：铺满 visibleFrame
     static func maximizeRect(in screen: CGRect, gap: CGFloat = 0) -> CGRect {
-        zoneRects(for: SnapLayout(id: "full", kind: .full), in: screen, gap: gap).first ?? screen
+        zoneRects(normalized: [CGRect(x: 0, y: 0, width: 1, height: 1)], in: screen, gap: gap).first ?? screen
     }
 }
 

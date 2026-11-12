@@ -27,15 +27,15 @@ struct SettingsRenderTests {
         }
         #expect(abs(tab.frame.width - bounds.width) < 1, "tab 容器宽度应贴满：\(tab.frame) vs \(bounds)")
         #expect(abs(tab.frame.height - bounds.height) < 1, "tab 容器高度应贴满")
-        #expect(tab.tabViewItems.count == 3)
+        #expect(tab.tabViewItems.count == 4, "布局/通用/快捷键/关于")
 
         // 注意：AppKit frame 坐标原点在左下角——顶对齐的视图 maxY ≈ 容器高度。
         // NSStackView 自身 flipped，绘制自顶向下；frame 仍在容器坐标系里。
 
         // 2) 通用页：栈应顶对齐（maxY≈页高）、靠左、尺寸合理
-        tab.selectTabViewItem(at: 0)
+        tab.selectTabViewItem(at: 1)
         win.contentView?.layoutSubtreeIfNeeded()
-        let general = tab.tabViewItems[0].view!
+        let general = tab.tabViewItems[1].view!
         guard let stack = general.subviews.compactMap({ $0 as? NSStackView }).first else {
             Issue.record("通用页找不到布局栈")
             return
@@ -54,9 +54,9 @@ struct SettingsRenderTests {
         #expect(inGeneral.maxY > general.bounds.height * 0.8, "功能开关应靠页面顶部，实际 \(inGeneral)")
 
         // 4) 快捷键页应有 12 行且不塌陷（需先选中该 tab 才会布局）
-        tab.selectTabViewItem(at: 1)
+        tab.selectTabViewItem(at: 2)
         win.contentView?.layoutSubtreeIfNeeded()
-        let hotkeys = tab.tabViewItems[1].view!
+        let hotkeys = tab.tabViewItems[2].view!
         guard let hkStack = hotkeys.subviews.compactMap({ $0 as? NSStackView }).first else {
             Issue.record("快捷键页找不到布局栈")
             return

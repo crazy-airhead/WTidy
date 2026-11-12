@@ -2,18 +2,20 @@ import AppKit
 
 /// Overlay 的全部绘制状态（矩形均为 AppKit 全局屏幕坐标，由 view 自行转换）
 struct OverlayModel {
-    /// 顶部布局缩略图条：每项 { 缩略图rect, 其内迷你分区rects }
-    var strip: [(rect: CGRect, miniZones: [CGRect])] = []
+    /// 布局图标条：每项 { 图标rect, 布局 }（布局用于绘制迷你区域预览）
+    var strip: [(rect: CGRect, layout: TidyLayout)] = []
     var hoveredStripIndex: Int? = nil
 
-    /// 展开态：整屏暗纱 + 当前布局分区
+    /// 展开态：整屏暗纱 + 当前布局分区落点预览
     var veilRect: CGRect? = nil
     var zones: [CGRect] = []
     var hoveredZoneIndex: Int? = nil
 }
 
-/// 翻转坐标的绘制视图：整屏分区高亮 + 顶部布局条。
-/// 交互模仿原版 Window Tidy：拖动瞬间整屏展开分区，拖到哪个分区哪个高亮，松手吸附。
+/// 翻转坐标的绘制视图。
+/// 交互对齐原版 Window Tidy：拖动时先只出现紧凑布局图标条；
+/// 光标在图标条内完成瞄准（图标内位置投影到布局区域），
+/// 选中布局后整屏显示落点预览；松手吸附。
 final class OverlayView: NSView {
     var model = OverlayModel() {
         didSet { needsDisplay = true }
@@ -22,10 +24,10 @@ final class OverlayView: NSView {
     override var isFlipped: Bool { true }
 
     override func draw(_ dirtyRect: NSRect) {
-        // 展开态：整屏暗纱 + 分区
+        // 展开态：整屏暗纱 + 落点分区
         if let veil = model.veilRect {
             let v = convert(veil)
-            NSColor.black.withAlphaComponent(0.22).setFill()
+            NSColor.black.withAlphaComponent(0.18).setFill()
             v.fill()
 
             for (i, zone) in model.zones.enumerated() {
@@ -38,7 +40,7 @@ final class OverlayView: NSView {
                     NSColor.white.withAlphaComponent(0.95).setStroke()
                     path.lineWidth = 3
                 } else {
-                    NSColor.white.withAlphaComponent(0.08).setFill()
+                    NSColor.white.withAlphaComponent(0.07).setFill()
                     path.fill()
                     NSColor.white.withAlphaComponent(0.7).setStroke()
                     path.lineWidth = 2
@@ -57,28 +59,32 @@ final class OverlayView: NSView {
         let card = union.insetBy(dx: -OverlayMetrics.stripPadding, dy: -OverlayMetrics.stripPadding)
 
         // 底卡
-        let cardPath = NSBezierPath(roundedRect: card, xRadius: 16, yRadius: 16)
+        let cardPath = NSBezierPath(roundedRect: card, xRadius: 14, yRadius: 14)
         NSColor.black.withAlphaComponent(0.58).setFill()
         cardPath.fill()
 
         for (i, item) in model.strip.enumerated() {
             let r = rects[i]
             let hovered = (i == model.hoveredStripIndex)
-            let thumb = NSBezierPath(roundedRect: r, xRadius: 10, yRadius: 10)
+            let thumb = NSBezierPath(roundedRect: r, xRadius: 8, yRadius: 8)
             if hovered {
-                NSColor.controlAccentColor.withAlphaComponent(0.8).setFill()
+                NSColor.controlAccentColor.withAlphaComponent(0.55).setFill()
             } else {
-                NSColor.white.withAlphaComponent(0.18).setFill()
+                NSColor.white.withAlphaComponent(0.16).setFill()
             }
             thumb.fill()
-            NSColor.white.withAlphaComponent(0.8).setStroke()
-            thumb.lineWidth = 1.5
+            NSColor.white.withAlphaComponent(0.75).setStroke()
+            thumb.lineWidth = hovered ? 2 : 1
             thumb.stroke()
 
-            // 迷你分区线
-            for mini in item.miniZones {
-                let m = convert(mini)
-                let miniPath = NSBezierPath(roundedRect: m.insetBy(dx: 2, dy: 2), xRadius: 5, yRadius: 5)
+            // 迷你区域预览（归一化 → 图标内矩形，注意 y 翻转：nr 原点在左上）
+            let inner = r.insetBy(dx: 5, dy: 5)
+            for nr in item.layout.normalizedRects {
+                let mini = CGRect(x: inner.minX + nr.minX * inner.width,
+                                  y: inner.minY + (1 - nr.maxY) * inner.height,
+                                  width: nr.width * inner.width,
+                                  height: nr.height * inner.height)
+                let miniPath = NSBezierPath(roundedRect: mini.insetBy(dx: 1.5, dy: 1.5), xRadius: 3, yRadius: 3)
                 if hovered {
                     NSColor.white.withAlphaComponent(0.92).setFill()
                 } else {
@@ -98,9 +104,12 @@ final class OverlayView: NSView {
 }
 
 enum OverlayMetrics {
-    /// 布局缩略图尺寸（约为旧版的两倍，易瞄准；屏幕过窄时自适应缩小）
-    static let thumbSize = CGSize(width: 124, height: 78)
-    static let thumbSpacing: CGFloat = 14
-    static let stripPadding: CGFloat = 14
-    static let stripTopGap: CGFloat = 14
+    /// 布局图标尺寸：目标为整条不超过原版的 ~512pt（窄屏自适应缩放）
+    static let iconMaxWidth: CGFloat = 110
+    static let iconMinWidth: CGFloat = 56
+    static let iconAspectRatio: CGFloat = 0.58   // 高/宽
+    static let thumbSpacing: CGFloat = 10
+    static let stripPadding: CGFloat = 12
+    static let stripTopGap: CGFloat = 10
+    static let stripHitInset: CGFloat = 6        // 命中外扩，更容易瞄准
 }
