@@ -1,5 +1,6 @@
 import Testing
 import CoreGraphics
+import Foundation
 @testable import WTidy
 
 // CLT 工具链不带 XCTest，使用 Swift Testing（Testing.framework + 宏插件随 CLT 分发）
@@ -8,6 +9,8 @@ private func close(_ a: CGFloat, _ b: CGFloat, eps: CGFloat = 0.001) -> Bool {
     abs(a - b) < eps
 }
 
+// 套件内测试共享 LayoutStore 全局状态，必须串行执行
+@Suite(.serialized)
 struct SnapEngineTests {
     // 模拟屏：1920×1080，可见区去掉顶部 25pt 菜单栏
     let visible = CGRect(x: 0, y: 0, width: 1920, height: 1055)
@@ -186,6 +189,73 @@ struct SnapEngineTests {
         #expect(OverlayController.layoutAndZone(for: .twoThirdsRight)?.1 == 0)
         #expect(OverlayController.layoutAndZone(for: .center) == nil)
         #expect(OverlayController.layoutAndZone(for: .restore) == nil)
+    }
+
+    // MARK: - 自动分组（原版 AutoGroupLayouts）
+
+    @Test func autoGroupMerge() {
+        let saved = Prefs.autoGroupLayouts
+        defer { Prefs.autoGroupLayouts = saved }
+
+        // 左半 + 右半 自定义布局：互补可合并
+        let left = TidyLayout(id: "L", name: "左半", cols: 2, rows: 1, regions: [.init(1, 1, 1, 1)])
+        let right = TidyLayout(id: "R", name: "右半", cols: 2, rows: 1, regions: [.init(2, 1, 2, 1)])
+        #expect(TidyLayout.groupable(left, right))
+        let merged = TidyLayout.merged(left, right)
+        #expect(merged.regions.count == 2)
+        #expect(merged.normalizedRects.count == 2)
+
+        // 左2/3 + 右2/3 区域重叠（单元 2）→ 不可合并
+        let t32l = TidyLayout.builtins.first { $0.id == "twoThirdsLeft" }!
+        let t32r = TidyLayout.builtins.first { $0.id == "twoThirdsRight" }!
+        #expect(!TidyLayout.groupable(t32l, t32r))
+
+        // 作用域不同 → 不可合并
+        var scopedRight = right
+        scopedRight.scope = 5
+        #expect(!TidyLayout.groupable(left, scopedRight))
+    }
+
+    @Test func displayLayoutsScopeFilterAndGroup() {
+        let savedLayouts = LayoutStore.layouts
+        let savedGroup = Prefs.autoGroupLayouts
+        defer {
+            LayoutStore.layouts = savedLayouts
+            Prefs.autoGroupLayouts = savedGroup
+        }
+
+        let left = TidyLayout(id: "L", name: "左半", cols: 2, rows: 1, regions: [.init(1, 1, 1, 1)])
+        let right = TidyLayout(id: "R", name: "右半", cols: 2, rows: 1, regions: [.init(2, 1, 2, 1)])
+        let scopedOnly = TidyLayout(id: "S", name: "屏专属", cols: 2, rows: 1,
+                                    regions: [.init(1, 1, 2, 1)], scope: 12345)
+
+        // 1) 自动分组：同网格互补布局合并为一个图标
+        Prefs.autoGroupLayouts = true
+        LayoutStore.layouts = [left, right]
+        let all = LayoutStore.displayLayouts(for: nil)
+        #expect(all.count == 1)
+        #expect(all[0].id == "L+R")
+        #expect(all[0].regions.count == 2)
+
+        // 2) 作用域过滤：scope=12345 的布局只出现在该屏；不同 scope 不参与合并
+        LayoutStore.layouts = [left, scopedOnly]
+        let onScreen = LayoutStore.displayLayouts(for: 12345)
+        #expect(onScreen.count == 2)                      // L(所有屏) + S(本屏)
+        let other = LayoutStore.displayLayouts(for: 99999)
+        #expect(other.count == 1 && other[0].id == "L")   // S 不在别的屏展示
+
+        // 3) 关闭自动分组：不合并
+        Prefs.autoGroupLayouts = false
+        LayoutStore.layouts = [left, right]
+        #expect(LayoutStore.displayLayouts(for: nil).count == 2)
+    }
+
+    @Test func scopeDecodeCompatWithoutField() {
+        // 旧版持久化 JSON 无 scope 字段 → 解码回退 -1
+        let json = #"{"id":"x","name":"旧","cols":2,"rows":1,"regions":[{"x1":1,"y1":1,"x2":1,"y2":1}]}"#
+        let decoded = try? JSONDecoder().decode(TidyLayout.self, from: Data(json.utf8))
+        #expect(decoded?.scope == -1)
+        #expect(decoded?.name == "旧")
     }
 
     // MARK: - 居中

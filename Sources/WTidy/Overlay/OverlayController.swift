@@ -19,6 +19,8 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
     private var stripRectsGlobal: [CGRect] = []
     private var zonesGlobal: [CGRect] = []
     private var frameMemory = FrameMemory()
+    /// 当前屏实际展示的布局（作用域过滤 + 自动分组后）
+    private var visibleLayouts: [TidyLayout] = []
 
     /// 吸附成功回调（用于状态栏展示与日志），参数为人类可读描述
     var onSnapApplied: ((String) -> Void)?
@@ -66,6 +68,7 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
 
         activeScreen = screen
         activeScreenNumber = screenNumber(of: screen)
+        visibleLayouts = LayoutStore.displayLayouts(for: activeScreenNumber)
         activeLayout = nil
         activeZoneIndex = nil
         presentOverlay(on: screen, cursor: cursor)   // 仅图标条，落点预览待选中布局后出现
@@ -79,6 +82,7 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
             }
             activeScreen = screen
             activeScreenNumber = screenNumber(of: screen)
+            visibleLayouts = LayoutStore.displayLayouts(for: activeScreenNumber)
             if let layout = activeLayout {
                 zonesGlobal = SnapEngine.zoneRects(for: layout, in: screen.visibleFrame, gap: Prefs.windowGap)
                 activeZoneIndex = nil
@@ -94,8 +98,8 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
         guard let win = window else { return }
 
         // 路径 1：松手在图标上 → 图标内投影选区（主路径，鼠标行程最短）
-        if let i = stripIndex(at: cursor), LayoutStore.layouts.indices.contains(i) {
-            let layout = LayoutStore.layouts[i]
+        if let i = stripIndex(at: cursor), visibleLayouts.indices.contains(i) {
+            let layout = visibleLayouts[i]
             let r = stripRectsGlobal[i]
             let nx = (cursor.x - r.minX) / max(r.width, 1)
             let ny = (r.maxY - cursor.y) / max(r.height, 1)
@@ -136,8 +140,8 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
         var model = OverlayModel()
 
         let hoveredStrip = stripShouldShow ? stripIndex(at: cursor) : nil
-        if let i = hoveredStrip, LayoutStore.layouts.indices.contains(i) {
-            let layout = LayoutStore.layouts[i]
+        if let i = hoveredStrip, visibleLayouts.indices.contains(i) {
+            let layout = visibleLayouts[i]
             if activeLayout?.id != layout.id {
                 activeLayout = layout
                 zonesGlobal = SnapEngine.zoneRects(for: layout, in: screen.visibleFrame, gap: Prefs.windowGap)
@@ -154,7 +158,7 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
         }
 
         if stripShouldShow {
-            model.strip = zip(stripRectsGlobal, LayoutStore.layouts).map { (rect: $0, layout: $1) }
+            model.strip = zip(stripRectsGlobal, visibleLayouts).map { (rect: $0, layout: $1) }
         } else {
             model.strip = []
         }
@@ -171,7 +175,7 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
 
     /// 图标条摆放：几何统一走 StripGeometry（与「定位」页预览共用，预览即真实）
     private func computeStripRects(screen: NSScreen) {
-        stripRectsGlobal = StripGeometry.iconRects(layoutCount: LayoutStore.layouts.count,
+        stripRectsGlobal = StripGeometry.iconRects(layoutCount: visibleLayouts.count,
                                                    in: screen.visibleFrame)
     }
 
@@ -244,24 +248,28 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
                 AppLog.info("恢复位置：没有 '\(win.title ?? "?")' 的历史记录")
                 return
             }
-            win.setNSFrame(original)
+            WindowAnimator.apply(win, to: original) { [weak self] in
+                self?.onSnapApplied?("恢复原位置 · \(screen.localizedName)")
+            }
             frameMemory.remove(key: key)
-            onSnapApplied?("恢复原位置 · \(screen.localizedName)")
 
         case .center:
             guard let size = win.nsFrame?.size else { return }
             rememberIfNeeded(win)
             let rect = SnapEngine.centeredRect(size: size, in: vf)
-            win.setNSFrame(rect)
-            onSnapApplied?("居中（保持尺寸） · \(screen.localizedName)")
+            WindowAnimator.apply(win, to: rect) { [weak self] in
+                self?.onSnapApplied?("居中（保持尺寸） · \(screen.localizedName)")
+            }
 
         default:
             guard let (layout, zone) = Self.layoutAndZone(for: action) else { return }
             let zones = SnapEngine.zoneRects(for: layout, in: vf, gap: gap)
             guard zones.indices.contains(zone), !zones[zone].isNull else { return }
             rememberIfNeeded(win)
-            win.setNSFrame(zones[zone])
-            onSnapApplied?("\(zoneDisplayName(layout: layout, index: zone)) · \(screen.localizedName)")
+            let desc = "\(zoneDisplayName(layout: layout, index: zone)) · \(screen.localizedName)"
+            WindowAnimator.apply(win, to: zones[zone]) { [weak self] in
+                self?.onSnapApplied?(desc)
+            }
         }
     }
 
@@ -272,7 +280,7 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
         }
     }
 
-    /// 供快速布局调用：把前台窗口吸到指定布局的指定区域
+    /// 供快速布局/菜单调用：把前台窗口吸到指定布局的指定区域
     @discardableResult
     func snapFrontmost(layout: TidyLayout, zoneIndex: Int) -> Bool {
         guard AccessibilityService.isTrusted else { return false }
@@ -281,10 +289,92 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
         let zones = SnapEngine.zoneRects(for: layout, in: screen.visibleFrame, gap: Prefs.windowGap)
         guard zones.indices.contains(zoneIndex), !zones[zoneIndex].isNull else { return false }
         rememberIfNeeded(win)
-        win.setNSFrame(zones[zoneIndex])
         let desc = "\(zoneDisplayName(layout: layout, index: zoneIndex)) · \(screen.localizedName)"
-        AppLog.info("SNAP(quick) '\(win.title ?? "?")' → \(desc)")
-        onSnapApplied?(desc)
+        WindowAnimator.apply(win, to: zones[zoneIndex]) { [weak self] in
+            AppLog.info("SNAP '\(win.title ?? "?")' → \(desc)")
+            self?.onSnapApplied?(desc)
+        }
+        return true
+    }
+
+    /// 菜单「应用布局」：区域由窗口中心在屏内的归一化位置投影决定
+    /// （窗口在左半屏时应用「左右半屏」会落到左半区，符合直觉）
+    @discardableResult
+    func applyLayoutToWindow(_ layout: TidyLayout) -> Bool {
+        guard AccessibilityService.isTrusted else { return false }
+        guard let win = ax.frontmostWindow(), win.canSnap else { return false }
+        guard let screen = screenForWindow(win) else { return false }
+        let vf = screen.visibleFrame
+        var zone = 0
+        if let frame = win.nsFrame {
+            let nx = (frame.midX - vf.minX) / max(vf.width, 1)
+            let ny = (vf.maxY - frame.midY) / max(vf.height, 1)   // 原点左上
+            zone = SnapEngine.zoneIndexInIcon(nx: min(max(nx, 0), 0.999),
+                                              ny: min(max(ny, 0), 0.999),
+                                              layout: layout) ?? 0
+        }
+        return snapFrontmost(layout: layout, zoneIndex: zone)
+    }
+
+    /// 菜单「应用布局」按 id 查找（兼容自动分组产生的合并 id）
+    @discardableResult
+    func applyLayoutByID(_ id: String) -> Bool {
+        let display = LayoutStore.displayLayouts(for: nil)
+        let layout = display.first { $0.id == id } ?? LayoutStore.layout(id: id)
+        guard let layout = layout else { return false }
+        return applyLayoutToWindow(layout)
+    }
+
+    /// 菜单「恢复所有窗口」：把本次会话内吸附过的窗口全部还原到吸附前位置
+    func restoreAllWindows() {
+        guard AccessibilityService.isTrusted else { return }
+        var restored = 0
+        let memory = frameMemory.store
+        for app in NSWorkspace.shared.runningApplications where app.activationPolicy == .regular {
+            let element = AXUIElementCreateApplication(app.processIdentifier)
+            guard let value = axCopyValue(element, "AXWindows" as String) else { continue }
+            guard let windows = value as? [AXUIElement] else { continue }
+            for w in windows {
+                let axWin = AXWindow(element: w, pid: app.processIdentifier)
+                let key = axWin.memoryKey
+                guard memory.keys.contains(key), let original = memory[key] else { continue }
+                axWin.setNSFrame(original)
+                frameMemory.remove(key: key)
+                restored += 1
+            }
+        }
+        AppLog.info("恢复所有窗口：\(restored) 个")
+        onSnapApplied?("已恢复 \(restored) 个窗口原位置")
+    }
+
+    /// 菜单「移动到活动显示器」：把前台窗口移到光标所在屏，保持相对位置与尺寸比例
+    @discardableResult
+    func moveFrontmostToActiveDisplay() -> Bool {
+        guard AccessibilityService.isTrusted else { return false }
+        guard let win = ax.frontmostWindow(), win.canSnap, let frame = win.nsFrame else { return false }
+        guard let fromScreen = screenForWindow(win),
+              let toScreen = screenForPoint(NSEvent.mouseLocation),
+              screenNumber(of: fromScreen) != screenNumber(of: toScreen) else {
+            onSnapApplied?("窗口已在活动显示器上")
+            return false
+        }
+        let fromVF = fromScreen.visibleFrame
+        let toVF = toScreen.visibleFrame
+        // 相对位置比例映射 + 尺寸限制在目标屏内
+        let relX = (frame.midX - fromVF.minX) / max(fromVF.width, 1)
+        let relY = (fromVF.maxY - frame.midY) / max(fromVF.height, 1)
+        var w = min(frame.width, toVF.width)
+        var h = min(frame.height, toVF.height)
+        w = min(w, toVF.width); h = min(h, toVF.height)
+        let x = toVF.minX + relX * toVF.width - w / 2
+        let yTop = toVF.minY + relY * toVF.height + h / 2
+        let target = CGRect(x: x, y: yTop - h, width: w, height: h).intersection(toVF)
+        rememberIfNeeded(win)
+        let desc = "已移动到 \(toScreen.localizedName)"
+        WindowAnimator.apply(win, to: target) { [weak self] in
+            AppLog.info("MOVE '\(win.title ?? "?")' → \(desc)")
+            self?.onSnapApplied?(desc)
+        }
         return true
     }
 
@@ -330,23 +420,25 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
     // MARK: - 应用吸附（拖拽路径）
 
     private func applyRect(_ rect: CGRect, to win: AXWindow, layout: TidyLayout, zoneIndex: Int) {
-        win.setNSFrame(rect)
         let screenName = activeScreen?.localizedName ?? "?"
         var desc = "\(zoneDisplayName(layout: layout, index: zoneIndex)) · \(screenName)"
 
-        // 对齐原版「窗口未能调整尺寸时显示警告」：读回实际 frame 比对
-        if let actual = win.nsFrame {
-            let deviation = max(abs(actual.minX - rect.minX), abs(actual.minY - rect.minY),
-                                abs(actual.width - rect.width), abs(actual.height - rect.height))
-            if deviation > 5 {
-                AppLog.warn("SNAP 偏差 \(Int(deviation))pt '\(win.title ?? "?")' 目标=\(rect) 实际=\(actual)")
-                if Prefs.warnOnFail {
-                    desc = "⚠️ 未能完全调整尺寸（偏差 \(Int(deviation))pt）— " + desc
+        // 动画吸附（原版 AnimateWindows）；完成后读回 frame 检测偏差
+        WindowAnimator.apply(win, to: rect) { [weak self] in
+            guard let self = self else { return }
+            if let actual = win.nsFrame {
+                let deviation = max(abs(actual.minX - rect.minX), abs(actual.minY - rect.minY),
+                                    abs(actual.width - rect.width), abs(actual.height - rect.height))
+                if deviation > 5 {
+                    AppLog.warn("SNAP 偏差 \(Int(deviation))pt '\(win.title ?? "?")' 目标=\(rect) 实际=\(actual)")
+                    if Prefs.warnOnFail {
+                        desc = "⚠️ 未能完全调整尺寸（偏差 \(Int(deviation))pt）— " + desc
+                    }
                 }
             }
+            AppLog.info("SNAP '\(win.title ?? "?")' → \(desc)")
+            self.onSnapApplied?(desc)
         }
-        AppLog.info("SNAP '\(win.title ?? "?")' → \(desc)")
-        onSnapApplied?(desc)
     }
 
     // MARK: - 屏幕工具

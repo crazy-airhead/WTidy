@@ -14,6 +14,9 @@ final class StatusMenuController: NSObject {
         var requestPermissions: () -> Void
         var restart: () -> Void
         var showQuickLayout: () -> Void
+        var applyLayoutByID: (String) -> Void
+        var restoreAllWindows: () -> Void
+        var moveToActiveDisplay: () -> Void
     }
 
     private let statusItem: NSStatusItem
@@ -24,6 +27,11 @@ final class StatusMenuController: NSObject {
     private let dragToggle = NSMenuItem(title: "拖拽分屏", action: nil, keyEquivalent: "")
     private let hotkeyToggle = NSMenuItem(title: "全局快捷键", action: nil, keyEquivalent: "")
     private let loginToggle = NSMenuItem(title: "开机自动启动", action: nil, keyEquivalent: "")
+    private let layoutSubmenu = NSMenuItem(title: "应用布局到前台窗口", action: nil, keyEquivalent: "")
+    private let restoreAllItem = NSMenuItem(title: "恢复所有窗口位置", action: nil, keyEquivalent: "")
+    private let moveToDisplayItem = NSMenuItem(title: "移动窗口到活动显示器", action: nil, keyEquivalent: "")
+    /// attract 脉冲（对齐原版 attractState）：缺权限时图标闪烁引起注意
+    private var attractTimer: Timer?
 
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -55,6 +63,18 @@ final class StatusMenuController: NSObject {
         loginToggle.isEnabled = true
         menu.addItem(loginToggle)
 
+        // 布局子菜单（原版主菜单的 Apply Layout）：打开时动态重建
+        layoutSubmenu.submenu = NSMenu()
+        layoutSubmenu.submenu?.delegate = self
+        menu.addItem(layoutSubmenu)
+        restoreAllItem.target = self
+        restoreAllItem.action = #selector(restoreAllClicked)
+        menu.addItem(restoreAllItem)
+        moveToDisplayItem.target = self
+        moveToDisplayItem.action = #selector(moveToDisplayClicked)
+        menu.addItem(moveToDisplayItem)
+        menu.addItem(.separator())
+
         let quickItem = NSMenuItem(title: "快速布局", action: #selector(showQuickLayout), keyEquivalent: "l")
         quickItem.target = self
         menu.addItem(quickItem)
@@ -85,20 +105,35 @@ final class StatusMenuController: NSObject {
     // MARK: - 状态更新
 
     func update(state: State) {
+        attractTimer?.invalidate()
+        attractTimer = nil
         switch state {
         case .ok:
             statusItem.button?.image = Self.symbolImage("rectangle.split.2x2", tint: nil, alpha: 1)
+            statusItem.button?.alphaValue = 1
             statusLine.attributedTitle = Self.dotTitle("正常监听中", color: .systemGreen,
                                                        detail: "拖拽任意窗口顶部即可分屏")
         case .noPermission:
             statusItem.button?.image = Self.symbolImage("exclamationmark.triangle.fill", tint: .systemYellow, alpha: 1)
             statusLine.attributedTitle = Self.dotTitle("缺少辅助功能权限", color: .systemYellow,
                                                        detail: "点此打开系统设置授权")
+            startAttractPulse()
         case .paused:
             statusItem.button?.image = Self.symbolImage("rectangle.split.2x2", tint: nil, alpha: 0.35)
+            statusItem.button?.alphaValue = 1
             statusLine.attributedTitle = Self.dotTitle("拖拽分屏已暂停", color: .systemGray,
                                                        detail: "在下方开关中重新开启")
         }
+    }
+
+    /// attract 脉冲：0.6s 闪烁，授权后自动停止
+    private func startAttractPulse() {
+        let timer = Timer(timeInterval: 0.6, repeats: true) { [weak self] _ in
+            guard let button = self?.statusItem.button else { return }
+            button.alphaValue = button.alphaValue > 0.5 ? 0.35 : 1
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        attractTimer = timer
     }
 
     func setLastSnap(_ text: String) {
@@ -204,9 +239,59 @@ final class StatusMenuController: NSObject {
 
 extension StatusMenuController: NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
+        if menu === layoutSubmenu.submenu {
+            rebuildLayoutSubmenu(menu)
+            return
+        }
         refreshToggles()
         update(state: currentRenderState)
     }
+
+    /// 布局子菜单：每次打开重建（对齐原版 Apply Layout，作用于最前窗口）
+    private func rebuildLayoutSubmenu(_ menu: NSMenu) {
+        menu.removeAllItems()
+        let layouts = LayoutStore.displayLayouts(for: nil)
+        let trusted = AccessibilityService.isTrusted
+        if layouts.isEmpty {
+            let empty = NSMenuItem(title: "（无布局，请在设置的「布局」页添加）", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            menu.addItem(empty)
+            return
+        }
+        for layout in layouts {
+            let item = NSMenuItem(title: layout.name, action: #selector(applyLayoutClicked), keyEquivalent: "")
+            item.target = self
+            item.identifier = NSUserInterfaceItemIdentifier(layout.id)
+            item.isEnabled = trusted
+            let icon = NSImage(size: NSSize(width: 36, height: 20))
+            icon.lockFocus()
+            let inner = NSRect(x: 1, y: 1, width: 34, height: 18)
+            for nr in layout.normalizedRects {
+                let r = NSRect(x: inner.minX + nr.minX * inner.width,
+                               y: inner.minY + (1 - nr.maxY) * inner.height,
+                               width: nr.width * inner.width,
+                               height: nr.height * inner.height)
+                NSColor.controlAccentColor.withAlphaComponent(0.8).setFill()
+                NSBezierPath(roundedRect: r.insetBy(dx: 0.5, dy: 0.5), xRadius: 2, yRadius: 2).fill()
+            }
+            icon.unlockFocus()
+            item.image = icon
+            menu.addItem(item)
+        }
+        menu.addItem(.separator())
+        let manage = NSMenuItem(title: "管理布局…", action: #selector(openSettings), keyEquivalent: "")
+        manage.target = self
+        menu.addItem(manage)
+    }
+
+    @objc private func applyLayoutClicked(_ sender: NSMenuItem) {
+        guard let id = sender.identifier?.rawValue else { return }
+        hooks?.applyLayoutByID(id)
+    }
+
+    @objc private func restoreAllClicked() { hooks?.restoreAllWindows() }
+
+    @objc private func moveToDisplayClicked() { hooks?.moveToActiveDisplay() }
 
     private var currentRenderState: State {
         if !AccessibilityService.isTrusted { return .noPermission }

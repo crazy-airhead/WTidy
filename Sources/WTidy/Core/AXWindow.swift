@@ -121,6 +121,18 @@ final class AXWindow {
         }
     }
 
+    /// 只写位置（动画分阶段用）
+    func setNSPosition(_ point: CGPoint) {
+        let h = ScreenGeometry.currentPrimaryHeight
+        axSetPoint(ref, kAXPositionAttribute, ScreenGeometry.axPoint(fromNS: point, primaryScreenHeight: h))
+    }
+
+    /// 只写尺寸（动画分阶段用）
+    func setNSSize(_ size: CGSize) {
+        let h = ScreenGeometry.currentPrimaryHeight
+        axSetSize(ref, kAXSizeAttribute, size)
+    }
+
     /// 用于 FrameMemory 的稳定键（pid + 标题，会话内足够）
     var memoryKey: String {
         "\(pid)|\(title ?? "")"

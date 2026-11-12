@@ -23,7 +23,9 @@ final class QuickLayoutController: NSObject {
 
         let width = CGFloat(Prefs.qlWidth)
         let height = CGFloat(Prefs.qlHeight)
-        let layouts = LayoutStore.layouts
+        // 作用域过滤（对齐原版布局的 "All Screens" 概念）：只展示适用于光标所在屏的布局
+        let screenID = screenAtMouse.flatMap { screenNumberOf($0) }
+        let layouts = LayoutStore.displayLayouts(for: screenID)
         guard !layouts.isEmpty else { return }
 
         let view = QuickIconsView(layouts: layouts, controller: self)
@@ -43,6 +45,10 @@ final class QuickLayoutController: NSObject {
         panel = p
         installMonitors()
         AppLog.info("快速布局已呼出（\(layouts.count) 个布局）")
+    }
+
+    private func screenNumberOf(_ screen: NSScreen) -> CGDirectDisplayID {
+        (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID) ?? 0
     }
 
     func hide() {

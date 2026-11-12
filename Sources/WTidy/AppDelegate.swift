@@ -17,7 +17,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             openSettings: { [weak self] in self?.openSettings() },
             requestPermissions: { [weak self] in self?.requestPermissions() },
             restart: { [weak self] in self?.restart() },
-            showQuickLayout: { QuickLayoutController.shared.show() }
+            showQuickLayout: { QuickLayoutController.shared.show() },
+            applyLayoutByID: { [weak self] id in
+                _ = self?.overlay.applyLayoutByID(id)
+            },
+            restoreAllWindows: { [weak self] in
+                self?.overlay.restoreAllWindows()
+            },
+            moveToActiveDisplay: { [weak self] in
+                _ = self?.overlay.moveFrontmostToActiveDisplay()
+            }
         ))
         QuickLayoutController.shared.overlay = overlay
         status.setVisible(Prefs.showStatusIcon)

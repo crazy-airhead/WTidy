@@ -4,6 +4,7 @@ import CoreGraphics
 /// 用户可编辑的分屏布局——对齐原版 Window Tidy 的 Layouts 模型：
 /// 网格（默认 6×6）+ 一个或多个区域，区域用 1-based 单元坐标 (x1,y1)-(x2,y2)，y1 为顶行。
 /// 内置布局只是预置数据，用户可在设置里增删改排序。
+/// scope：作用域（-1=所有屏幕，≥0=指定 displayID），对齐原版布局的 "All Screens" 概念。
 struct TidyLayout: Codable, Equatable {
     struct Region: Codable, Equatable {
         var x1: Int, y1: Int, x2: Int, y2: Int
@@ -29,6 +30,27 @@ struct TidyLayout: Codable, Equatable {
     var cols: Int
     var rows: Int
     var regions: [Region]
+    var scope: Int   // -1 = 所有屏幕（默认）；≥0 = 指定 CGDirectDisplayID
+
+    init(id: String, name: String, cols: Int, rows: Int, regions: [Region], scope: Int = -1) {
+        self.id = id
+        self.name = name
+        self.cols = cols
+        self.rows = rows
+        self.regions = regions
+        self.scope = scope
+    }
+
+    /// 兼容旧版持久化 JSON（无 scope 字段时回退 -1）
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        cols = try c.decode(Int.self, forKey: .cols)
+        rows = try c.decode(Int.self, forKey: .rows)
+        regions = try c.decode([Region].self, forKey: .regions)
+        scope = try c.decodeIfPresent(Int.self, forKey: .scope) ?? -1
+    }
 
     /// 归一化区域矩形（原点左上，0..1）——贴屏换算与缩略图共用
     var normalizedRects: [CGRect] {
@@ -45,6 +67,34 @@ struct TidyLayout: Codable, Equatable {
     static func == (lhs: TidyLayout, rhs: TidyLayout) -> Bool {
         lhs.id == rhs.id && lhs.name == rhs.name && lhs.cols == rhs.cols
             && lhs.rows == rhs.rows && lhs.regions == rhs.regions
+    }
+
+    /// 自动分组（对齐原版 AutoGroupLayouts）：两个同网格布局的区域互不重叠
+    /// 且互补合并后不超过网格 → 可合并为一个图标（图标内投影选区）。
+    static func groupable(_ a: TidyLayout, _ b: TidyLayout) -> Bool {
+        guard a.cols == b.cols, a.rows == b.rows, a.scope == b.scope else { return false }
+        let all = a.regions + b.regions
+        var occupied = Set<String>()
+        for r in all {
+            for x in r.x1...r.x2 {
+                for y in r.y1...r.y2 {
+                    let key = "\(x),\(y)"
+                    if occupied.contains(key) { return false }  // 重叠不可分组
+                    occupied.insert(key)
+                }
+            }
+        }
+        return true
+    }
+
+    /// 合并为一个布局（供自动分组），id 取二者拼接以保持可追溯
+    static func merged(_ a: TidyLayout, _ b: TidyLayout) -> TidyLayout {
+        TidyLayout(id: a.id + "+" + b.id,
+                   name: a.name + " / " + b.name,
+                   cols: a.cols,
+                   rows: a.rows,
+                   regions: a.regions + b.regions,
+                   scope: a.scope)
     }
 
     /// 内置布局（顺序即图标条顺序；id 稳定，快捷键依赖它）
@@ -84,5 +134,30 @@ enum LayoutStore {
 
     static func layout(id: String) -> TidyLayout? {
         layouts.first { $0.id == id }
+    }
+
+    /// 图标条/快速布局面板实际展示的布局列表：
+    /// 1) 按作用域过滤（-1 所有屏幕 或 匹配指定 displayID）
+    /// 2) 自动分组（对齐原版 AutoGroupLayouts）：连续的同网格互补布局合并为一个图标
+    static func displayLayouts(for displayID: CGDirectDisplayID?) -> [TidyLayout] {
+        var scoped = layouts
+        if let display = displayID {
+            scoped = scoped.filter { $0.scope == -1 || $0.scope == Int(display) }
+        }
+        guard Prefs.autoGroupLayouts else { return scoped }
+
+        var mergedList: [TidyLayout] = []
+        var index = 0
+        while index < scoped.count {
+            var current = scoped[index]
+            var next = index + 1
+            while next < scoped.count, TidyLayout.groupable(current, scoped[next]) {
+                current = TidyLayout.merged(current, scoped[next])
+                next += 1
+            }
+            mergedList.append(current)
+            index = next
+        }
+        return mergedList
     }
 }

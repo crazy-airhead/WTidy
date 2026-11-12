@@ -23,6 +23,8 @@ enum Prefs {
         static let showLayoutNames = "showLayoutNames"
         static let warnOnFail = "warnOnFail"
         static let stripBackground = "stripBackground" // 0=默认深色 1=桌面壁纸
+        static let animateWindows = "animateWindows"   // 原版 AnimateWindows
+        static let autoGroupLayouts = "autoGroupLayouts" // 原版 AutoGroupLayouts
         // 快速布局（原版 Quick Layout）
         static let qlKeyCode = "qlKeyCode"
         static let qlModifiers = "qlModifiers"
@@ -145,6 +147,18 @@ enum Prefs {
     static var stripBackground: Int {
         get { defaults.integer(forKey: Keys.stripBackground) }
         set { set(newValue, forKey: Keys.stripBackground) }
+    }
+
+    /// 吸附动画（原版 AnimateWindows）
+    static var animateWindows: Bool {
+        get { defaults.object(forKey: Keys.animateWindows) == nil ? true : defaults.bool(forKey: Keys.animateWindows) }
+        set { set(newValue, forKey: Keys.animateWindows) }
+    }
+
+    /// 自动分组相邻互补布局（原版 AutoGroupLayouts）
+    static var autoGroupLayouts: Bool {
+        get { defaults.object(forKey: Keys.autoGroupLayouts) == nil ? true : defaults.bool(forKey: Keys.autoGroupLayouts) }
+        set { set(newValue, forKey: Keys.autoGroupLayouts) }
     }
 
     // MARK: - 快速布局（原版 Quick Layout）

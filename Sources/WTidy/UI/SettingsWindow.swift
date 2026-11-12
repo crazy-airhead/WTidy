@@ -227,6 +227,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let statusIconCheck = NSButton(checkboxWithTitle: "显示菜单栏状态图标", target: nil, action: nil)
     private let namesCheck = NSButton(checkboxWithTitle: "在布局图标上显示名称", target: nil, action: nil)
     private let warnCheck = NSButton(checkboxWithTitle: "窗口未能调整尺寸时显示警告", target: nil, action: nil)
+    private let animateCheck = NSButton(checkboxWithTitle: "吸附窗口动画（跨屏分阶段移动）", target: nil, action: nil)
+    private let groupCheck = NSButton(checkboxWithTitle: "自动分组相邻互补布局", target: nil, action: nil)
 
     private func optionsTab() -> NSTabViewItem {
         let (content, stack) = makePage()
@@ -247,6 +249,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         stack.addArrangedSubview(namesCheck)
         stack.addArrangedSubview(warnCheck)
         stack.setCustomSpacing(16, after: warnCheck)
+
+        stack.addArrangedSubview(sectionTitle("窗口调整"))
+        stack.addArrangedSubview(animateCheck)
+        stack.addArrangedSubview(groupCheck)
+        stack.setCustomSpacing(16, after: groupCheck)
 
         stack.addArrangedSubview(sectionTitle("图标条背景"))
         let bgDefault = NSButton(title: "默认深色", target: self, action: #selector(bgDefaultClicked))
@@ -522,6 +529,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         namesCheck.action = #selector(namesChanged)
         warnCheck.target = self
         warnCheck.action = #selector(warnChanged)
+        animateCheck.target = self
+        animateCheck.action = #selector(animateChanged)
+        groupCheck.target = self
+        groupCheck.action = #selector(groupChanged)
         qlNearCursorCheck.target = self
         qlNearCursorCheck.action = #selector(qlNearCursorChanged)
     }
@@ -551,6 +562,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         statusIconCheck.state = Prefs.showStatusIcon ? .on : .off
         namesCheck.state = Prefs.showLayoutNames ? .on : .off
         warnCheck.state = Prefs.warnOnFail ? .on : .off
+        animateCheck.state = Prefs.animateWindows ? .on : .off
+        groupCheck.state = Prefs.autoGroupLayouts ? .on : .off
 
         // 定位页
         orientHoriRadio.state = Prefs.stripVertical ? .off : .on
@@ -606,6 +619,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     @objc private func statusIconChanged() { Prefs.showStatusIcon = statusIconCheck.state == .on }
     @objc private func namesChanged() { Prefs.showLayoutNames = namesCheck.state == .on }
     @objc private func warnChanged() { Prefs.warnOnFail = warnCheck.state == .on }
+    @objc private func animateChanged() { Prefs.animateWindows = animateCheck.state == .on }
+    @objc private func groupChanged() { Prefs.autoGroupLayouts = groupCheck.state == .on }
     @objc private func bgDefaultClicked() { Prefs.stripBackground = 0 }
     @objc private func bgWallpaperClicked() { Prefs.stripBackground = 1 }
 
@@ -834,6 +849,7 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
     private let nameField: NSTextField
     private let colsField: NSTextField
     private let rowsField: NSTextField
+    private let scopePopUp = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 200, height: 26), pullsDown: false)
     private let regionsStack: NSStackView
     private let previewView: NSImageView
     private var regionFields: [(x1: NSTextField, y1: NSTextField, x2: NSTextField, y2: NSTextField)] = []
@@ -913,6 +929,26 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
         stack.addArrangedSubview(gridRow)
         stack.setCustomSpacing(14, after: gridRow)
 
+        // 作用域（对齐原版布局的 "All Screens"）：所有屏幕或指定显示器
+        scopePopUp.addItem(withTitle: "所有屏幕")
+        scopePopUp.lastItem?.representedObject = -1
+        for screen in NSScreen.screens {
+            let displayID = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID) ?? 0
+            scopePopUp.addItem(withTitle: "仅 \(screen.localizedName)")
+            scopePopUp.lastItem?.representedObject = Int(displayID)
+            if working.scope == Int(displayID) {
+                scopePopUp.selectItem(withTitle: "仅 \(screen.localizedName)")
+            }
+        }
+        if working.scope == -1 {
+            scopePopUp.selectItem(at: 0)
+        }
+        let scopeRow = NSStackView(views: [label("作用域"), scopePopUp])
+        scopeRow.orientation = .horizontal
+        scopeRow.spacing = 8
+        stack.addArrangedSubview(scopeRow)
+        stack.setCustomSpacing(14, after: scopeRow)
+
         stack.addArrangedSubview(label("区域（单元坐标，1 起；y1 为顶行；格式 x1 y1 x2 y2）"))
         stack.addArrangedSubview(regionsStack)
 
@@ -991,6 +1027,7 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
         working.name = nameField.stringValue.isEmpty ? "未命名" : nameField.stringValue
         working.cols = max(1, min(12, Int(colsField.stringValue) ?? working.cols))
         working.rows = max(1, min(12, Int(rowsField.stringValue) ?? working.rows))
+        working.scope = (scopePopUp.selectedItem?.representedObject as? Int) ?? -1
         working.regions = regionFields.enumerated().map { i, f in
             let old = working.regions.indices.contains(i) ? working.regions[i] : TidyLayout.Region(1, 1, working.cols, working.rows)
             func v(_ field: NSTextField, _ fallback: Int) -> Int { Int(field.stringValue) ?? fallback }
