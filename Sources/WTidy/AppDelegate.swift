@@ -14,6 +14,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
         AppLog.info("WTidy \(version)(\(build)) 启动 · \(ProcessInfo.processInfo.operatingSystemVersionString) · \(Host.current().name ?? "?")")
 
+        // 历史遗留迁移：旧默认 512 / 旧建议值 880 → 1320（图标基准 150pt 所需总宽）
+        let legacyMaxWidth = UserDefaults.standard.object(forKey: Prefs.Keys.stripMaxWidth) as? Double
+        if legacyMaxWidth == 512 || legacyMaxWidth == 880 {
+            Prefs.stripMaxWidth = 1320
+            AppLog.info("迁移最大宽度 \(legacyMaxWidth!) → 1320")
+        }
+
         status.configure(hooks: .init(
             openSettings: { [weak self] in self?.openSettings() },
             requestPermissions: { [weak self] in self?.requestPermissions() },

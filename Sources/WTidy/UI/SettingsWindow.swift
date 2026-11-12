@@ -22,7 +22,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     private var hotkeyToggles: [NSButton] = []
 
     override init() {
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 680),
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 760),
                           styleMask: [.titled, .closable],
                           backing: .buffered, defer: false)
         super.init()
@@ -76,6 +76,12 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     }
 
     @objc private func doneClicked() {
+        // 输入框的 action 只在按回车时触发——点「完成」前强制提交所有字段
+        Prefs.stripMaxWidth = Double(maxWidthField.stringValue) ?? Prefs.stripMaxWidth
+        Prefs.stripMargin = Double(marginField.stringValue) ?? Prefs.stripMargin
+        Prefs.qlWidth = Double(qlWidthField.stringValue) ?? Prefs.qlWidth
+        Prefs.qlHeight = Double(qlHeightField.stringValue) ?? Prefs.qlHeight
+        refreshState()
         window.orderOut(nil)
     }
 
@@ -210,7 +216,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
 
     /// 页面容器 + 垂直布局栈（栈用单边约束，容器尺寸由窗口/tab 决定）
     private func makePage() -> (NSView, NSStackView) {
-        let content = NSView(frame: NSRect(x: 0, y: 0, width: 690, height: 590))
+        let content = NSView(frame: NSRect(x: 0, y: 0, width: 690, height: 680))
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -374,6 +380,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         posHSlider.action = #selector(posHChanged)
         posHSlider.isContinuous = true
         posHSlider.widthAnchor.constraint(equalToConstant: 600).isActive = true
+        posHSlider.heightAnchor.constraint(equalToConstant: 28).isActive = true
         posVSlider.target = self
         posVSlider.action = #selector(posVChanged)
         posVSlider.isContinuous = true

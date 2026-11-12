@@ -100,13 +100,11 @@ enum Prefs {
     }
 
     /// 整条最大宽度（默认 1320：8 个布局 × 150pt 基准 + 间距）。
-    /// 历史值（512/640/720/880 等）一次性迁移为 1320，保证大图标观感
+    /// 历史遗留值（512=旧默认、880=旧建议值）在应用启动时由 AppDelegate 一次性迁移。
     static var stripMaxWidth: Double {
         get {
             if defaults.object(forKey: Keys.stripMaxWidth) == nil { return 1320 }
-            let v = defaults.double(forKey: Keys.stripMaxWidth)
-            if v < 1300 { return 1320 }
-            return min(max(v, 200), 2400)
+            return min(max(defaults.double(forKey: Keys.stripMaxWidth), 200), 2400)
         }
         set { set(min(max(newValue, 200), 2400), forKey: Keys.stripMaxWidth) }
     }
