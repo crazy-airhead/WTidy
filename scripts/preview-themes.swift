@@ -2,7 +2,8 @@ import AppKit
 
 // 主题预览：复刻 LayoutIconRenderer 的 .dark 绘制逻辑，把四套 StripTheme
 // 画成一排图标（常规 / 悬停 / 投影命中），输出 PNG 供人工审美评估。
-// 用法：swift scripts/preview-themes.swift /tmp/themes.png
+// 用法：swift scripts/preview-themes.swift <out.png> [dark|light]
+// 第二参数选底色：dark = 深灰底（模拟深色壁纸/深色外观），light = 浅米灰底（模拟浅色壁纸/浅色外观）
 
 struct Theme {
     let name: String
@@ -61,12 +62,15 @@ let H = pad * 2 + CGFloat(rows) * (iconH + labelH + gap)
 
 let img = NSImage(size: NSSize(width: W, height: H))
 img.lockFocus()
-NSColor(white: 0.5, alpha: 1).setFill()   // 中性灰底，模拟任意壁纸
+// 浅色底取带暖调的米灰（贴近真实浅色壁纸观感），深色底取中性灰
+let lightBackdrop = CommandLine.arguments.count > 2 && CommandLine.arguments[2] == "light"
+(lightBackdrop ? NSColor(red: 0.88, green: 0.87, blue: 0.84, alpha: 1)
+              : NSColor(white: 0.5, alpha: 1)).setFill()
 NSRect(x: 0, y: 0, width: W, height: H).fill()
 
 let labelAttrs: [NSAttributedString.Key: Any] = [
     .font: NSFont.systemFont(ofSize: 12, weight: .medium),
-    .foregroundColor: NSColor.white,
+    .foregroundColor: lightBackdrop ? NSColor(white: 0.25, alpha: 1) : NSColor.white,
 ]
 
 for (ti, theme) in themes.enumerated() {
