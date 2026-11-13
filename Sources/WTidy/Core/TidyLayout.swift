@@ -123,18 +123,56 @@ struct TidyLayout: Codable, Equatable {
 enum LayoutStore {
     private static let key = "layoutList"
 
+    /// 历史迭代中的内置布局名称（46362f7 时代曾拆分为单区域条目，后合并为双区域）。
+    /// 用户存储列表可能残留旧 id/旧名条目，id 本地化够不着 → 英文界面夹中文。
+    private static let legacyBuiltinNames: Set<String> = ["左 1/3", "右 1/3", "左 2/3", "右 2/3"]
+
+    /// 区域排序（收编迁移时做结构比较用，画区域顺序不影响判定）
+    private static func regionOrder(_ a: TidyLayout.Region, _ b: TidyLayout.Region) -> Bool {
+        (a.x1, a.y1, a.x2, a.y2) < (b.x1, b.y1, b.x2, b.y2)
+    }
+
+    /// 读取时的规范化：
+    /// 1) 内置 id 条目——名称实时重译（JSON 存的是保存当时的语言，切语言后不重译会「英文界面夹中文」）；
+    /// 2) 未知 id 但「结构恰好等于某内置 + 名称是历史/当前内置默认名」的陈旧条目——收编为该内置
+    ///    （换 id+名，保留每布局激活快捷键）；收编后与已有 id 冲突则放弃（防重复）。
+    ///    名称是自定义的布局永不收编，避免吞掉用户故意改名的自定义布局。
+    private static func canonicalized(_ list: [TidyLayout]) -> [TidyLayout] {
+        var result: [TidyLayout] = []
+        var takenIds = Set<String>()
+        for item in list {
+            if let builtin = TidyLayout.builtins.first(where: { $0.id == item.id }) {
+                var translated = item
+                translated.name = builtin.name   // builtins 名称经 L() 求值，随启动语言
+                result.append(translated)
+                takenIds.insert(item.id)
+                continue
+            }
+            let structureMatches = TidyLayout.builtins.first {
+                $0.cols == item.cols && $0.rows == item.rows
+                    && $0.regions.sorted(by: regionOrder) == item.regions.sorted(by: regionOrder)
+            }
+            let nameIsBuiltin = legacyBuiltinNames.contains(item.name)
+                || TidyLayout.builtins.contains { $0.name == item.name }
+            if let builtin = structureMatches, nameIsBuiltin, !takenIds.contains(builtin.id) {
+                var migrated = item
+                migrated.id = builtin.id
+                migrated.name = builtin.name
+                result.append(migrated)
+                takenIds.insert(builtin.id)
+                continue
+            }
+            result.append(item)
+            takenIds.insert(item.id)
+        }
+        return result
+    }
+
     static var layouts: [TidyLayout] {
         get {
             if let data = UserDefaults.standard.data(forKey: key),
                let list = try? JSONDecoder().decode([TidyLayout].self, from: data), !list.isEmpty {
-                // 内置布局名称实时取当前语言翻译——JSON 持久化的是保存当时的语言，
-                // 切语言后不重译会出现"英文界面夹中文"
-                return list.map { item in
-                    guard let builtin = TidyLayout.builtins.first(where: { $0.id == item.id }) else { return item }
-                    var translated = item
-                    translated.name = builtin.name   // builtins 名称经 L() 求值，随启动语言
-                    return translated
-                }
+                return canonicalized(list)
             }
             return TidyLayout.builtins
         }

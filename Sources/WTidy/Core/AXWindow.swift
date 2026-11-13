@@ -44,12 +44,14 @@ func axAttributeSize(_ element: AXUIElement, _ attribute: String) -> CGSize? {
     return s
 }
 
+@discardableResult
 func axSetPoint(_ element: AXUIElement, _ attribute: String, _ point: CGPoint) -> Bool {
     var p = point
     guard let value = AXValueCreate(.cgPoint, &p) else { return false }
     return AXUIElementSetAttributeValue(element, attribute as CFString, value) == .success
 }
 
+@discardableResult
 func axSetSize(_ element: AXUIElement, _ attribute: String, _ size: CGSize) -> Bool {
     var s = size
     guard let value = AXValueCreate(.cgSize, &s) else { return false }
@@ -127,9 +129,8 @@ final class AXWindow {
         axSetPoint(ref, kAXPositionAttribute, ScreenGeometry.axPoint(fromNS: point, primaryScreenHeight: h))
     }
 
-    /// 只写尺寸（动画分阶段用）
+    /// 只写尺寸（动画分阶段用）；尺寸不涉及原点翻转，无需坐标换算
     func setNSSize(_ size: CGSize) {
-        let h = ScreenGeometry.currentPrimaryHeight
         axSetSize(ref, kAXSizeAttribute, size)
     }
 

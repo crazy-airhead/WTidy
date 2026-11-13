@@ -13,7 +13,9 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     private var loginCheckbox: NSButton!
 
     private init() {
-        let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 500, height: 430),
+        // 560 宽：英文按钮「Authorize in System Settings」+ 步骤文案实测需 440pt 行宽，
+        // 500 宽会把英文步骤行挤爆（图标与右侧控件重叠、按钮顶出卡片外）
+        let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 430),
                            styleMask: [.titled, .closable],
                            backing: .buffered, defer: false)
         win.title = L("欢迎使用 WTidy")
@@ -54,8 +56,8 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .centerX
-        stack.spacing = 16
-        stack.edgeInsets = NSEdgeInsets(top: 24, left: 24, bottom: 24, right: 24)
+        stack.spacing = Design.Spacing.cardGap
+        stack.edgeInsets = Design.Spacing.onboardingInsets
         stack.translatesAutoresizingMaskIntoConstraints = false
 
         // 头部
@@ -65,14 +67,14 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         icon.contentTintColor = .controlAccentColor
 
         let title = NSTextField(labelWithString: "WTidy")
-        title.font = .systemFont(ofSize: 26, weight: .bold)
-        let subtitle = NSTextField(labelWithString: L("原生重制的窗口分屏工具 · 致敬 Window Tidy"))
-        subtitle.font = .systemFont(ofSize: 12)
+        title.font = Design.Font.heroTitle
+        let subtitle = NSTextField(labelWithString: L("原生重制的窗口分屏工具"))
+        subtitle.font = Design.Font.body
         subtitle.textColor = .secondaryLabelColor
         let header = NSStackView(views: [icon, title, subtitle])
         header.orientation = .vertical
         header.alignment = .centerX
-        header.spacing = 6
+        header.spacing = Design.Spacing.headerGap
 
         // 步骤卡片
         let step1 = stepRow(number: "1",
@@ -87,18 +89,18 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
                             trailing: buildLoginControls())
         // 两行同宽：徽标左对齐、trailing 控件右对齐
         NSLayoutConstraint.activate([
-            step1.widthAnchor.constraint(equalToConstant: 398),
-            step2.widthAnchor.constraint(equalToConstant: 398),
+            step1.widthAnchor.constraint(equalToConstant: 468),
+            step2.widthAnchor.constraint(equalToConstant: 468),
         ])
 
         let card = NSStackView(views: [step1, step2])
         card.orientation = .vertical
         card.alignment = .leading   // ①② 步骤条左对齐（默认 centerX 会因行宽不同而错位）
-        card.spacing = 16
-        card.edgeInsets = NSEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
+        card.spacing = Design.Spacing.cardGap
+        card.edgeInsets = Design.Spacing.cardInsets
         card.wantsLayer = true
-        card.layer?.cornerRadius = 12
-        card.layer?.backgroundColor = NSColor.quaternaryLabelColor.withAlphaComponent(0.12).cgColor
+        card.layer?.cornerRadius = Design.Radius.onboardingCard
+        card.layer?.backgroundColor = Design.Color.cardFill.cgColor
 
         // 完成按钮
         doneButton = NSButton(title: L("请先完成第 1 步授权"), target: self, action: #selector(doneClicked))
@@ -108,12 +110,12 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         doneButton.isEnabled = false
         doneButton.widthAnchor.constraint(equalToConstant: 300).isActive = true
 
-        let hint = NSTextField(labelWithString: "拖拽任意窗口，屏幕顶部会出现布局条；悬停选择布局后松手即吸附。\n快捷键示例：⌥⌘← 左半屏，⌃⌥⌘F 最大化，⌃⌥⌘Z 恢复位置。")
-        hint.font = .systemFont(ofSize: 11)
+        let hint = NSTextField(labelWithString: L("拖拽任意窗口，屏幕顶部会出现布局条；悬停选择布局后松手即吸附。\n快捷键示例：⌥⌘← 左半屏，⌃⌥⌘F 最大化，⌃⌥⌘Z 恢复位置。"))
+        hint.font = Design.Font.hint
         hint.textColor = .secondaryLabelColor
         hint.alignment = .center
         hint.lineBreakMode = .byWordWrapping
-        hint.maximumNumberOfLines = 2
+        hint.maximumNumberOfLines = 3   // 英文文案按语义拆成 3 行（中文 2 行）
 
         stack.addArrangedSubview(header)
         stack.addArrangedSubview(card)
@@ -127,14 +129,14 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
             stack.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             stack.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            card.widthAnchor.constraint(equalToConstant: 430),
+            card.widthAnchor.constraint(equalToConstant: 500),
         ])
         return container
     }
 
     private func buildTrustControls() -> NSView {
         trustStatusLabel = NSTextField(labelWithString: "")
-        trustStatusLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        trustStatusLabel.font = Design.Font.bodyEmphasis
 
         authorizeButton = NSButton(title: L("打开系统设置授权"), target: self, action: #selector(authorizeClicked))
 
@@ -159,9 +161,9 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         badge.contentTintColor = .controlAccentColor
 
         let titleLabel = NSTextField(labelWithString: title)
-        titleLabel.font = .systemFont(ofSize: 13, weight: .medium)
+        titleLabel.font = Design.Font.stepTitle
         let detailLabel = NSTextField(labelWithString: detail)
-        detailLabel.font = .systemFont(ofSize: 11)
+        detailLabel.font = Design.Font.hint
         detailLabel.textColor = .secondaryLabelColor
         let texts = NSStackView(views: [titleLabel, detailLabel])
         texts.orientation = .vertical
@@ -170,7 +172,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
 
         let row = NSStackView(views: [badge, texts])
         row.orientation = .horizontal
-        row.spacing = 10
+        row.spacing = Design.Spacing.groupGap
         row.alignment = .firstBaseline
 
         let outer = NSStackView(views: [row, trailing])

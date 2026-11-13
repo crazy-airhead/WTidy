@@ -1,4 +1,5 @@
-// 生成 WTidy 应用图标：蓝紫渐变圆角方块 + 白色 2×2 网格
+// 生成 WTidy 应用图标：深青蓝渐变 + W 窗口轨迹，两端是吸附落点的窗口砖块
+// 概念：W 是窗口被拖动的轨迹，两个波峰是吸附落点——左白右青（命中目标高亮）
 // 用法: swift scripts/make-icon.swift <输出路径.icns>
 import Foundation
 import CoreGraphics
@@ -9,6 +10,37 @@ let output = CommandLine.arguments.count > 1
     ? URL(fileURLWithPath: CommandLine.arguments[1])
     : URL(fileURLWithPath: "AppIcon.icns")
 
+func color(_ red: CGFloat, _ green: CGFloat, _ blue: CGFloat, _ alpha: CGFloat = 1) -> CGColor {
+    CGColor(red: red, green: green, blue: blue, alpha: alpha)
+}
+
+func roundedRect(_ rect: CGRect, radius: CGFloat) -> CGPath {
+    CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil)
+}
+
+// 圆角矩形窗口砖块：主体 + 顶部标题栏
+func drawWindowTile(_ ctx: CGContext, rect: CGRect, radius: CGFloat,
+                    fill: CGColor, barFill: CGColor, glow: CGColor?) {
+    ctx.saveGState()
+    if let glow {
+        ctx.setShadow(offset: .zero, blur: rect.width * 0.30, color: glow)
+    }
+    ctx.addPath(roundedRect(rect, radius: radius))
+    ctx.setFillColor(fill)
+    ctx.fillPath()
+    ctx.restoreGState()
+
+    // 标题栏：顶部一条横杠
+    let barWidth = rect.width * 0.44
+    let barHeight = max(0.75, rect.width * 0.075)
+    let bar = CGRect(x: rect.midX - barWidth / 2,
+                     y: rect.maxY - rect.height * 0.30,
+                     width: barWidth, height: barHeight)
+    ctx.addPath(roundedRect(bar, radius: barHeight / 2))
+    ctx.setFillColor(barFill)
+    ctx.fillPath()
+}
+
 func renderIcon(size: CGFloat) -> CGImage? {
     let space = CGColorSpace(name: CGColorSpace.sRGB)!
     guard let ctx = CGContext(data: nil, width: Int(size), height: Int(size),
@@ -17,51 +49,101 @@ func renderIcon(size: CGFloat) -> CGImage? {
                               bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
 
     let s = size
-    let margin = s * 0.10
+    let margin = s * 0.055
     let body = CGRect(x: margin, y: margin, width: s - margin * 2, height: s - margin * 2)
-    let radius = s * 0.225
+    let bodyPath = roundedRect(body, radius: s * 0.2237)
 
-    // 渐变底
-    let colors = [
-        CGColor(red: 0.32, green: 0.52, blue: 0.96, alpha: 1),
-        CGColor(red: 0.16, green: 0.32, blue: 0.80, alpha: 1),
-    ] as CFArray
-    let grad = CGGradient(colorsSpace: space, colors: colors, locations: [0, 1])!
+    // ---- 背景 ----
     ctx.saveGState()
-    let bodyPath = CGPath(roundedRect: body, cornerWidth: radius, cornerHeight: radius, transform: nil)
     ctx.addPath(bodyPath)
     ctx.clip()
-    ctx.drawLinearGradient(grad,
-                           start: CGPoint(x: s * 0.2, y: s),
-                           end: CGPoint(x: s * 0.8, y: 0),
+
+    let background = CGGradient(colorsSpace: space, colors: [
+        color(0.35, 0.82, 0.93),   // 亮青
+        color(0.20, 0.46, 0.88),   // 湛蓝
+        color(0.07, 0.09, 0.28),   // 深海军蓝
+    ] as CFArray, locations: [0, 0.52, 1])!
+    ctx.drawLinearGradient(background,
+                           start: CGPoint(x: s * 0.10, y: s * 0.96),
+                           end: CGPoint(x: s * 0.90, y: s * 0.04),
                            options: [])
-    // 顶部高光
-    let hl = CGGradient(colorsSpace: space, colors: [
-        CGColor(red: 1, green: 1, blue: 1, alpha: 0.25),
-        CGColor(red: 1, green: 1, blue: 1, alpha: 0.0),
+
+    // 顶部光晕
+    let glow = CGGradient(colorsSpace: space, colors: [
+        color(0.80, 0.99, 1, 0.20),
+        color(0.80, 0.99, 1, 0),
     ] as CFArray, locations: [0, 1])!
-    ctx.drawLinearGradient(hl, start: CGPoint(x: 0, y: s), end: CGPoint(x: 0, y: s * 0.45), options: [])
+    ctx.drawRadialGradient(glow,
+                           startCenter: CGPoint(x: s * 0.22, y: s * 0.88), startRadius: 0,
+                           endCenter: CGPoint(x: s * 0.22, y: s * 0.88), endRadius: s * 0.66,
+                           options: [])
+
+    // 底部压暗
+    let lowerShade = CGGradient(colorsSpace: space, colors: [
+        color(0.03, 0.04, 0.15, 0),
+        color(0.03, 0.04, 0.15, 0.24),
+    ] as CFArray, locations: [0, 1])!
+    ctx.drawLinearGradient(lowerShade,
+                           start: CGPoint(x: s * 0.5, y: s * 0.44),
+                           end: CGPoint(x: s * 0.5, y: s * 0.06),
+                           options: [])
     ctx.restoreGState()
 
-    // 2×2 白色网格
-    let inset = body.insetBy(dx: body.width * 0.18, dy: body.height * 0.18)
-    let gap = inset.width * 0.08
-    let cell = (inset.width - gap) / 2
-    let cellRadius = cell * 0.22
-    for ox in [0.0, 1.0] {
-        for oy in [0.0, 1.0] {
-            let r = CGRect(x: inset.minX + CGFloat(ox) * (cell + gap),
-                           y: inset.minY + CGFloat(oy) * (cell + gap),
-                           width: cell, height: cell)
-            let p = CGPath(roundedRect: r, cornerWidth: cellRadius, cornerHeight: cellRadius, transform: nil)
-            ctx.setShadow(offset: CGSize(width: 0, height: -s * 0.01), blur: s * 0.02,
-                          color: CGColor(red: 0, green: 0, blue: 0.2, alpha: 0.25))
-            ctx.addPath(p)
-            ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
-            ctx.fillPath()
-            ctx.setShadow(offset: .zero, blur: 0, color: nil)
-        }
-    }
+    // 边缘白描边
+    ctx.addPath(bodyPath)
+    ctx.setStrokeColor(color(1, 1, 1, 0.20))
+    ctx.setLineWidth(max(0.75, s * 0.004))
+    ctx.strokePath()
+
+    // ---- W 轨迹 ----
+    let w = CGMutablePath()
+    w.move(to: CGPoint(x: s * 0.245, y: s * 0.665))
+    w.addLine(to: CGPoint(x: s * 0.375, y: s * 0.305))
+    w.addLine(to: CGPoint(x: s * 0.500, y: s * 0.510))
+    w.addLine(to: CGPoint(x: s * 0.625, y: s * 0.305))
+    w.addLine(to: CGPoint(x: s * 0.755, y: s * 0.665))
+
+    ctx.saveGState()
+    ctx.setShadow(offset: CGSize(width: 0, height: -s * 0.012), blur: s * 0.022,
+                  color: color(0.02, 0.03, 0.12, 0.36))
+    ctx.addPath(w)
+    ctx.setStrokeColor(color(0.96, 0.985, 1))
+    ctx.setLineWidth(s * 0.082)
+    ctx.setLineCap(.round)
+    ctx.setLineJoin(.round)
+    ctx.strokePath()
+    ctx.restoreGState()
+
+    // ---- 两个窗口砖块（吸附落点）----
+    let tile = s * 0.158
+    let tileRadius = tile * 0.26
+    let leftTile = CGRect(x: s * 0.245 - tile / 2, y: s * 0.665 - tile * 0.34,
+                          width: tile, height: tile)
+    let rightTile = CGRect(x: s * 0.755 - tile / 2, y: s * 0.665 - tile * 0.34,
+                           width: tile, height: tile)
+
+    ctx.saveGState()
+    ctx.setShadow(offset: CGSize(width: 0, height: -s * 0.012), blur: s * 0.018,
+                  color: color(0.02, 0.03, 0.12, 0.32))
+    ctx.addPath(roundedRect(leftTile, radius: tileRadius))
+    ctx.setFillColor(color(0.96, 0.985, 1))
+    ctx.fillPath()
+    ctx.restoreGState()
+    // 左砖标题栏
+    let barW = tile * 0.44
+    let barH = max(0.75, tile * 0.075)
+    let leftBar = CGRect(x: leftTile.midX - barW / 2, y: leftTile.maxY - tile * 0.30,
+                         width: barW, height: barH)
+    ctx.addPath(roundedRect(leftBar, radius: barH / 2))
+    ctx.setFillColor(color(0.13, 0.28, 0.52, 0.50))
+    ctx.fillPath()
+
+    // 右砖：命中目标，青色 + 发光
+    drawWindowTile(ctx, rect: rightTile, radius: tileRadius,
+                   fill: color(0.55, 1.0, 0.85),
+                   barFill: color(0.04, 0.34, 0.32, 0.60),
+                   glow: color(0.50, 1.0, 0.84, 0.75))
+
     return ctx.makeImage()
 }
 
@@ -71,7 +153,6 @@ func writePNG(_ image: CGImage, to url: URL) {
     CGImageDestinationFinalize(dest)
 }
 
-// iconset 目录
 let fm = FileManager.default
 let iconsetDir = output.deletingLastPathComponent().appendingPathComponent("WTidy.iconset")
 try? fm.removeItem(at: iconsetDir)
@@ -93,7 +174,6 @@ for (name, px) in sizes {
     }
 }
 
-// iconutil 生成 icns
 let proc = Process()
 proc.executableURL = URL(fileURLWithPath: "/usr/bin/iconutil")
 proc.arguments = ["-c", "icns", iconsetDir.path, "-o", output.path]

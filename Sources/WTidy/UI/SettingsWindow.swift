@@ -13,8 +13,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     private let tabView = NSTabView()
 
     // 通用页控件
-    private let dragCheck = NSButton(checkboxWithTitle: L("启用拖拽分屏"), target: nil, action: nil)
-    private let hotkeyCheck = NSButton(checkboxWithTitle: L("启用全局快捷键"), target: nil, action: nil)
     private let loginCheck = NSButton(checkboxWithTitle: L("开机自动启动"), target: nil, action: nil)
     private let gapSegment = NSSegmentedControl(labels: [L("贴合"), "4pt", "8pt", "12pt"],
                                                 trackingMode: .selectOne, target: nil, action: nil)
@@ -33,7 +31,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
 
         let content = window.contentView!
 
-        tabView.font = .systemFont(ofSize: 13)
+        tabView.font = Design.Font.tab
         tabView.addTabViewItem(layoutsTab())
         tabView.addTabViewItem(optionsTab())
         tabView.addTabViewItem(positioningTab())
@@ -41,8 +39,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
 
         // 底部栏。窗口固定尺寸不可缩放，全部用静态 frame（零 Auto Layout，
         // 规避 NSTabView 固有尺寸与窗口高度约束的冲突）
-        let width = content.bounds.width     // 580
-        let height = content.bounds.height   // 680
+        let width = content.bounds.width     // 720
+        let height = content.bounds.height   // 760
         let barHeight: CGFloat = 46
 
         let separator = NSBox()
@@ -56,12 +54,14 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         bar.autoresizingMask = [.width]
         content.addSubview(bar)
 
-        loginCheck.frame = NSRect(x: 16, y: (barHeight - 24) / 2, width: 220, height: 24)
+        // 底栏控件与设计边距体系对齐（barInset=24，同 pageInsets 左值）；
+        // 旧值 16 是规范外魔法数——与页面卡片（22..698）、内容列（46..674）都不对齐
+        loginCheck.frame = NSRect(x: Design.Spacing.barInset, y: (barHeight - 24) / 2, width: 220, height: 24)
         bar.addSubview(loginCheck)
         let doneButton = NSButton(title: L("完成"), target: self, action: #selector(doneClicked))
         doneButton.keyEquivalent = "\r"
         doneButton.bezelStyle = .rounded
-        doneButton.frame = NSRect(x: width - 16 - 76, y: (barHeight - 28) / 2, width: 76, height: 28)
+        doneButton.frame = NSRect(x: width - Design.Spacing.barInset - 76, y: (barHeight - 28) / 2, width: 76, height: 28)
         bar.addSubview(doneButton)
 
         tabView.frame = NSRect(x: 12, y: barHeight + 8, width: width - 24, height: height - barHeight - 16)
@@ -82,6 +82,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
 
     func present() {
         refreshState()
+        window.center()   // 每次打开都在屏幕居中（窗口创建于 (0,0)，不居中会落在主屏左下角）
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -89,15 +90,23 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     // MARK: - Tab 页构建
 
     /// 布局页：对齐原版 Layouts——列表（拖拽排序 / 双击编辑）+ 左下角 +/−
-    private let layoutTable = NSTableView()
+    private let layoutTable = LayoutListTableView()
     private let layoutScrollView = NSScrollView()
     private static let layoutDragType = NSPasteboard.PasteboardType("com.allblue.wtidy.layoutrow")
 
+    /// 说明文字限宽在内容列内换行——英文翻译比中文长，放任固有宽度会溢出页面甚至窗口
+    private func columnCapped(_ label: NSTextField, width: CGFloat? = nil) -> NSTextField {
+        label.widthAnchor.constraint(lessThanOrEqualToConstant: width ?? Self.columnWidth).isActive = true
+        return label
+    }
+
     private func layoutsTab() -> NSTabViewItem {
         let (scroll, stack) = makePage()
-        stack.spacing = 8
+        stack.spacing = Design.Spacing.groupGap
 
-        let caption = captionText(L("拖动可更改布局顺序，双击编辑；双击后可在编辑器里为布局录制专属激活快捷键。固定方向快捷键（⌥⌘←/→ 等）始终可用。"))
+        let caption = columnCapped(Design.Text.caption(
+            L("拖动可更改布局顺序，双击编辑；双击后可在编辑器里为布局录制专属激活快捷键。固定方向快捷键（⌥⌘←/→ 等）始终可用。"),
+            wrapWidth: Self.columnWidth))
         stack.addArrangedSubview(caption)
         stack.setCustomSpacing(10, after: caption)
 
@@ -111,10 +120,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         layoutTable.allowsColumnReordering = false
         layoutTable.intercellSpacing = NSSize(width: 0, height: 8)
         layoutTable.style = .plain
-        layoutTable.draggingDestinationFeedbackStyle = .gap   // 拖拽排序时显示插入空隙
+        layoutTable.draggingDestinationFeedbackStyle = .none  // 系统空隙反馈太微弱，改用自绘插入指示线（见 LayoutListTableView）
         layoutTable.registerForDraggedTypes([Self.layoutDragType])  // 不注册则永远不是拖放目标
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("layout"))
-        column.width = 640
+        column.width = Self.columnWidth
         layoutTable.addTableColumn(column)
 
         layoutScrollView.documentView = layoutTable
@@ -122,8 +131,16 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         layoutScrollView.autohidesScrollers = true
         layoutScrollView.drawsBackground = false
         layoutScrollView.translatesAutoresizingMaskIntoConstraints = false
-        layoutScrollView.heightAnchor.constraint(equalToConstant: 420).isActive = true
-        layoutScrollView.widthAnchor.constraint(equalToConstant: 660).isActive = true
+        // 列表吃掉页面剩余高度（≥420 下限），消除底部大空白：
+        // 仅本页用 .fill 分布 + 栈高 ≥ 视口（优先级 900，可被内容增长自然突破转为滚动），
+        // 列表是唯一低垂直拥抱（200）的视图，余量全部进列表；行多时列表内部滚动，页面不溢出
+        stack.distribution = .fill
+        let fillHeight = stack.heightAnchor.constraint(greaterThanOrEqualTo: scroll.contentView.heightAnchor)
+        fillHeight.priority = NSLayoutConstraint.Priority(900)
+        fillHeight.isActive = true
+        layoutScrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 420).isActive = true
+        layoutScrollView.setContentHuggingPriority(NSLayoutConstraint.Priority(200), for: .vertical)
+        layoutScrollView.widthAnchor.constraint(equalToConstant: Self.columnWidth).isActive = true
         stack.addArrangedSubview(layoutScrollView)
         stack.setCustomSpacing(12, after: layoutScrollView)
 
@@ -144,7 +161,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         bottom.orientation = .horizontal
         bottom.spacing = 8
         bottom.translatesAutoresizingMaskIntoConstraints = false
-        bottom.widthAnchor.constraint(equalToConstant: 660).isActive = true
+        bottom.widthAnchor.constraint(equalToConstant: Self.columnWidth).isActive = true
         flexible.setContentHuggingPriority(.defaultLow, for: .horizontal)
         stack.addArrangedSubview(bottom)
 
@@ -211,15 +228,20 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         }
     }
 
-    /// 页面容器 + 垂直布局栈（栈用单边约束，容器尺寸由窗口/tab 决定）
-    // 页面容器：滚动视图包裹垂直布局栈。
-    // 内容再长也只是滚动，不会被压缩裁切（此前分组框被裁掉最后一项即此因）。
+    /// 页面栈文档视图必须翻转：本环境下 NSStackView 实测 isFlipped=false，
+    /// 非翻转 docView 内容短于视口时会被 NSClipView 底对齐——整页内容下沉、
+    /// 顶部大片空白（2026-11-13 用户截图实测；此前几何断言漏算 bounds.origin 误判过一次）。
+    private final class PageStackView: NSStackView {
+        override var isFlipped: Bool { true }
+    }
+
+    /// 页面容器：滚动视图包裹垂直布局栈（文档视图翻转：短内容顶对齐，长内容滚动）。
     private func makePage() -> (NSScrollView, NSStackView) {
-        let stack = NSStackView()
+        let stack = PageStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 10
-        stack.edgeInsets = NSEdgeInsets(top: 18, left: 24, bottom: 18, right: 24)
+        stack.spacing = Design.Spacing.stackGap
+        stack.edgeInsets = Design.Spacing.pageInsets
         stack.translatesAutoresizingMaskIntoConstraints = false
 
         let scroll = NSScrollView()
@@ -235,6 +257,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         return (scroll, stack)
     }
 
+    /// 内容列宽：页面 676 − pageInsets 左右 48 = 628（窗口固定 720 不可缩放，
+    /// 用常量 + 注释；此前硬编码 660 超宽 32pt，「恢复内置布局」被顶出右缘）。
+    /// 跨视图约束（相对栈宽）在视图入树前激活会抛 NSGenericException，故不用。
+    private static let columnWidth: CGFloat = 628
+
     // MARK: - 行为页（原版 Options：标题在外、控件在圆角分组框内）
 
     private let optionHideRadio = NSButton(radioButtonWithTitle: L("按住 ⌥ 隐藏布局图标"), target: nil, action: nil)
@@ -242,39 +269,52 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     private let statusIconCheck = NSButton(checkboxWithTitle: L("显示菜单栏状态图标"), target: nil, action: nil)
     private let namesCheck = NSButton(checkboxWithTitle: L("在布局图标上显示名称"), target: nil, action: nil)
     private let warnCheck = NSButton(checkboxWithTitle: L("窗口未能调整尺寸时显示警告"), target: nil, action: nil)
-    private let animateCheck = NSButton(checkboxWithTitle: L("吸附窗口动画（跨屏分阶段移动）"), target: nil, action: nil)
     private let groupCheck = NSButton(checkboxWithTitle: L("自动分组相邻互补布局"), target: nil, action: nil)
     private let themeInkRadio = NSButton(radioButtonWithTitle: L("墨蓝"), target: nil, action: nil)
     private let themeGraphiteRadio = NSButton(radioButtonWithTitle: L("石墨"), target: nil, action: nil)
     private let themeTealRadio = NSButton(radioButtonWithTitle: L("青碧"), target: nil, action: nil)
     private let themeVioletRadio = NSButton(radioButtonWithTitle: L("紫罗兰"), target: nil, action: nil)
     private let bgWell = NSImageView(frame: NSRect(x: 0, y: 0, width: 220, height: 124))
-    private let bgDefaultButton = NSButton(title: L("默认深色"), target: nil, action: nil)
+    private let bgDefaultButton = NSButton(title: L("默认背景"), target: nil, action: nil)
     private let bgWallpaperButton = NSButton(title: L("使用桌面壁纸"), target: nil, action: nil)
 
-    /// 原版式分组框：小节标题在外，控件装进圆角框
-    private func groupBox(_ controls: [NSView], width: CGFloat = 660) -> NSView {
+    /// 原版式分组框：小节标题在外，控件装进圆角框；宽度 = 内容列宽
+    private func groupBox(_ controls: [NSView]) -> NSView {
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 8
-        stack.edgeInsets = NSEdgeInsets(top: 10, left: 14, bottom: 10, right: 14)
+        stack.spacing = Design.Spacing.groupGap
+        stack.edgeInsets = Design.Spacing.groupInsets
         for c in controls { stack.addArrangedSubview(c) }
         let box = NSBox()
         box.boxType = .primary
         box.title = ""
         box.contentView = stack
         box.translatesAutoresizingMaskIntoConstraints = false
-        box.widthAnchor.constraint(equalToConstant: width).isActive = true
+        box.widthAnchor.constraint(equalToConstant: Self.columnWidth).isActive = true
         return box
     }
 
     private func optionsTab() -> NSTabViewItem {
         let (scroll, stack) = makePage()
-        stack.spacing = 8
+        stack.spacing = Design.Spacing.groupGap
 
-        stack.addArrangedSubview(sectionTitle(L("行为")))
-        let behaviorIntro = captionText(L("⌥ 选项按钮用于控制布局图标的显示。"))
+        // 缺权限警告行钉在页首：这是最高优先级的异常状态，沉底会不可见
+        let warnIcon = NSImageView(image: NSImage(systemSymbolName: "exclamationmark.triangle.fill",
+                                                 accessibilityDescription: nil) ?? NSImage())
+        warnIcon.contentTintColor = .systemYellow
+        let warnText = Design.Text.bodyLabel(L("缺少辅助功能权限，功能未生效"))
+        let grantButton = NSButton(title: L("去授权"), target: self, action: #selector(grantClicked))
+        permissionRow.orientation = .horizontal
+        permissionRow.spacing = 8
+        permissionRow.addArrangedSubview(warnIcon)
+        permissionRow.addArrangedSubview(warnText)
+        permissionRow.addArrangedSubview(grantButton)
+        stack.addArrangedSubview(permissionRow)
+
+        stack.addArrangedSubview(Design.Text.sectionTitle(L("行为")))
+        let behaviorIntro = columnCapped(Design.Text.caption(L("⌥ 选项按钮用于控制布局图标的显示。")),
+                                         width: Self.columnWidth - 28)   // 分组框内宽（628 − 左右内边距 28）
         optionHideRadio.target = self
         optionHideRadio.action = #selector(optionKeyModeChanged)
         optionShowRadio.target = self
@@ -282,14 +322,14 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         stack.addArrangedSubview(groupBox([behaviorIntro, optionHideRadio, optionShowRadio,
                                            statusIconCheck, groupCheck, namesCheck, warnCheck]))
 
-        stack.addArrangedSubview(sectionTitle(L("窗口调整")))
-        stack.addArrangedSubview(groupBox([animateCheck, groupCheck, dragCheck, hotkeyCheck]))
-
-        stack.addArrangedSubview(sectionTitle(L("图标条配色")))
+        // 注意：groupCheck 已在「行为」框——同一控件实例不能进第二个容器（会被静默移走）
+        // 「窗口调整」区已删除（对齐原版）：拖拽分屏 / 全局快捷键 / 吸附动画均为常开行为，不设开关
+        stack.addArrangedSubview(Design.Text.sectionTitle(L("图标条配色")))
         stack.addArrangedSubview(groupBox([themeInkRadio, themeGraphiteRadio, themeTealRadio, themeVioletRadio]))
 
-        stack.addArrangedSubview(sectionTitle(L("背景")))
-        let bgIntro = captionText(L("布局图标条背景可使用默认深色或桌面壁纸。"))
+        stack.addArrangedSubview(Design.Text.sectionTitle(L("背景")))
+        let bgIntro = columnCapped(Design.Text.caption(L("布局图标条背景可使用默认背景或桌面壁纸。")),
+                                   width: Self.columnWidth - 28)
         bgDefaultButton.target = self
         bgDefaultButton.action = #selector(bgDefaultClicked)
         bgWallpaperButton.target = self
@@ -305,25 +345,12 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         bgWell.wantsLayer = true
         bgWell.layer?.borderColor = NSColor.separatorColor.cgColor
         bgWell.layer?.borderWidth = 1
-        bgWell.layer?.cornerRadius = 4
+        bgWell.layer?.cornerRadius = Design.Radius.insetFrame
         let wellRow = NSStackView(views: [bgWell, bgButtons])
         wellRow.orientation = .horizontal
         wellRow.spacing = 16
         bgInner.addArrangedSubview(wellRow)
         stack.addArrangedSubview(groupBox([bgInner]))
-
-        let warnIcon = NSImageView(image: NSImage(systemSymbolName: "exclamationmark.triangle.fill",
-                                                 accessibilityDescription: nil) ?? NSImage())
-        warnIcon.contentTintColor = .systemYellow
-        let warnText = NSTextField(labelWithString: L("缺少辅助功能权限，功能未生效"))
-        warnText.font = .systemFont(ofSize: 12)
-        let grantButton = NSButton(title: L("去授权"), target: self, action: #selector(grantClicked))
-        permissionRow.orientation = .horizontal
-        permissionRow.spacing = 8
-        permissionRow.addArrangedSubview(warnIcon)
-        permissionRow.addArrangedSubview(warnText)
-        permissionRow.addArrangedSubview(grantButton)
-        stack.addArrangedSubview(permissionRow)
 
         let item = NSTabViewItem(identifier: "options")
         item.label = L("行为")
@@ -331,7 +358,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         return item
     }
 
-    /// 背景图井预览：默认渐变或桌面壁纸
+    /// 背景图井预览：图标底色的两种铺法——默认主题深底 / 桌面壁纸+蒙板（预览即真实）
     private func refreshBackgroundWell() {
         let img = NSImage(size: NSSize(width: 220, height: 124))
         img.lockFocus()
@@ -340,11 +367,13 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
            let url = NSWorkspace.shared.desktopImageURL(for: screen),
            let wallpaper = NSImage(contentsOf: url) {
             wallpaper.draw(in: NSRect(origin: .zero, size: img.size),
-                           from: NSRect(x: 0, y: 0, width: wallpaper.size.width, height: wallpaper.size.height / 2),
-                           operation: .copy, fraction: 1)
+                           from: .zero, operation: .sourceOver, fraction: 1)
+            // 与图标壁纸底叠同一条压暗蒙板
+            Design.Color.stripWallpaperVeil.setFill()
+            NSRect(origin: .zero, size: img.size).fill(using: .sourceOver)
         } else {
-            let grad = NSGradient(colors: [NSColor(red: 0.62, green: 0.78, blue: 0.94, alpha: 1),
-                                           NSColor(red: 0.22, green: 0.38, blue: 0.68, alpha: 1)])
+            // 默认背景 = 图标主题深底（随「图标条配色」联动）
+            let grad = NSGradient(colors: StripTheme.at(Prefs.stripTheme).bgColors)
             grad?.draw(in: NSRect(origin: .zero, size: img.size), angle: 270)
         }
         img.unlockFocus()
@@ -366,13 +395,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     private func positioningTab() -> NSTabViewItem {
         let (scroll, stack) = makePage()
 
-        func label(_ t: String) -> NSTextField {
-            let f = NSTextField(labelWithString: t)
-            f.font = .systemFont(ofSize: 12)
-            return f
-        }
-
-        stack.addArrangedSubview(sectionTitle(L("排列方向")))
+        stack.addArrangedSubview(Design.Text.sectionTitle(L("排列方向")))
         orientHoriRadio.target = self
         orientHoriRadio.action = #selector(orientationChanged)
         orientVertRadio.target = self
@@ -382,13 +405,14 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         orientRow.spacing = 16
         stack.addArrangedSubview(orientRow)
 
-        stack.addArrangedSubview(sectionTitle(L("屏幕位置")))
+        stack.addArrangedSubview(Design.Text.sectionTitle(L("屏幕位置")))
         // 对齐原版：滑块与排列方式联动——横向排列只显示纵向滑块（调上下），
         // 纵向排列只显示横向滑块（调左右）；显隐在 refreshState 里切换
         posHSlider.target = self
         posHSlider.action = #selector(posHChanged)
         posHSlider.isContinuous = true
-        posHSlider.widthAnchor.constraint(equalToConstant: 600).isActive = true
+        // 594 = 内容列 628 − 纵向滑杆 24 − 行距 10；此前 600 会随纵向滑杆一起超出内容列
+        posHSlider.widthAnchor.constraint(equalToConstant: 594).isActive = true
         posHSlider.heightAnchor.constraint(equalToConstant: 28).isActive = true
         posVSlider.target = self
         posVSlider.action = #selector(posVChanged)
@@ -398,7 +422,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         posVSlider.heightAnchor.constraint(equalToConstant: 340).isActive = true
 
         posPreview.translatesAutoresizingMaskIntoConstraints = false
-        posPreview.widthAnchor.constraint(equalToConstant: 600).isActive = true
+        posPreview.widthAnchor.constraint(equalToConstant: 594).isActive = true
         posPreview.heightAnchor.constraint(equalToConstant: 340).isActive = true
 
         let previewColumn = NSStackView(views: [posPreview, posHSlider])
@@ -410,23 +434,28 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         posRow.spacing = 10
         stack.addArrangedSubview(posRow)
 
-        stack.addArrangedSubview(sectionTitle(L("尺寸")))
+        stack.addArrangedSubview(Design.Text.sectionTitle(L("尺寸")))
         maxWidthField.target = self
         maxWidthField.action = #selector(maxWidthCommitted)
         marginField.target = self
         marginField.action = #selector(marginCommitted)
         maxWidthField.widthAnchor.constraint(equalToConstant: 70).isActive = true
         marginField.widthAnchor.constraint(equalToConstant: 70).isActive = true
-        let dimsRow = NSStackView(views: [label(L("最大宽度")), maxWidthField, label(L("边距")), marginField])
+        let dimsRow = NSStackView(views: [Design.Text.bodyLabel(L("最大宽度")), maxWidthField,
+                                          Design.Text.bodyLabel(L("边距")), marginField])
         dimsRow.orientation = .horizontal
-        dimsRow.spacing = 8
+        dimsRow.spacing = Design.Spacing.groupGap
         stack.addArrangedSubview(dimsRow)
-        stack.addArrangedSubview(captionText(L("数值为整条图标条的总宽度；单图标宽 = 可用宽度 ÷ 布局数（基准 150pt，下限 90pt）。")))
+        stack.addArrangedSubview(columnCapped(Design.Text.caption(
+            L("数值为整条图标条的总宽度；单图标宽 = 可用宽度 ÷ 布局数（基准 150pt，下限 90pt）。"),
+            wrapWidth: Self.columnWidth)))
 
-        stack.addArrangedSubview(sectionTitle(L("窗口间隙")))
+        stack.addArrangedSubview(Design.Text.sectionTitle(L("窗口间隙")))
         gapSegment.translatesAutoresizingMaskIntoConstraints = false
         stack.addArrangedSubview(gapSegment)
-        stack.addArrangedSubview(captionText(L("贴合为原版 Window Tidy 的行为；间距可让相邻窗口留出呼吸感。")))
+        stack.addArrangedSubview(columnCapped(Design.Text.caption(
+            L("贴合为窗口完全贴齐；间距可让相邻窗口留出呼吸感。"),
+            wrapWidth: Self.columnWidth)))
 
         let item = NSTabViewItem(identifier: "positioning")
         item.label = L("定位")
@@ -435,7 +464,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     }
 
     private func aboutTab() -> NSTabViewItem {
-        let content = NSView(frame: NSRect(x: 0, y: 0, width: 580, height: 512))
+        // 初始尺寸取 tab 内容区（NSTabView 会再拉伸对齐）；居中靠约束，不靠 frame
+        let content = NSView(frame: NSRect(x: 0, y: 0, width: 696, height: 698))
 
         let iconConfig = NSImage.SymbolConfiguration(pointSize: 48, weight: .light)
         let icon = NSImageView(image: NSImage(systemSymbolName: "rectangle.split.2x2", accessibilityDescription: nil)?
@@ -444,14 +474,14 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
 
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
         let title = NSTextField(labelWithString: "WTidy \(version)")
-        title.font = .systemFont(ofSize: 20, weight: .bold)
-        let credit = NSTextField(labelWithString: "arm64 原生 · 看门狗自愈 · 现代登录项\n重制致敬 Window Tidy（Light Pillar, 2011–2017）")
+        title.font = Design.Font.dialogTitle
+        let credit = NSTextField(labelWithString: L("arm64 原生 · 看门狗自愈 · 现代登录项"))
         credit.alignment = .center
-        credit.font = .systemFont(ofSize: 11)
+        credit.font = Design.Font.hint
         credit.textColor = .secondaryLabelColor
 
         let logPath = NSTextField(labelWithString: AppLog.shared.logPath.path)
-        logPath.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
+        logPath.font = Design.Font.monoSmall
         logPath.textColor = .secondaryLabelColor
         logPath.lineBreakMode = .byTruncatingMiddle
         logPath.preferredMaxLayoutWidth = 440
@@ -478,10 +508,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     // MARK: - 状态刷新与动作
 
     private func wireActions() {
-        dragCheck.target = self
-        dragCheck.action = #selector(toggleDrag)
-        hotkeyCheck.target = self
-        hotkeyCheck.action = #selector(toggleHotkeys)
         loginCheck.target = self
         loginCheck.action = #selector(toggleLogin)
         gapSegment.target = self
@@ -492,8 +518,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         namesCheck.action = #selector(namesChanged)
         warnCheck.target = self
         warnCheck.action = #selector(warnChanged)
-        animateCheck.target = self
-        animateCheck.action = #selector(animateChanged)
         groupCheck.target = self
         groupCheck.action = #selector(groupChanged)
         for radio in [themeInkRadio, themeGraphiteRadio, themeTealRadio, themeVioletRadio] {
@@ -503,8 +527,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     }
 
     private func refreshState() {
-        dragCheck.state = Prefs.dragEnabled ? .on : .off
-        hotkeyCheck.state = Prefs.hotkeysEnabled ? .on : .off
         loginCheck.state = (LoginItemController.isAvailable && LoginItemController.isEnabled) ? .on : .off
         loginCheck.isEnabled = LoginItemController.isAvailable
         switch Prefs.windowGap {
@@ -523,7 +545,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         statusIconCheck.state = Prefs.showStatusIcon ? .on : .off
         namesCheck.state = Prefs.showLayoutNames ? .on : .off
         warnCheck.state = Prefs.warnOnFail ? .on : .off
-        animateCheck.state = Prefs.animateWindows ? .on : .off
         groupCheck.state = Prefs.autoGroupLayouts ? .on : .off
         themeInkRadio.state = Prefs.stripTheme == 0 ? .on : .off
         themeGraphiteRadio.state = Prefs.stripTheme == 1 ? .on : .off
@@ -544,8 +565,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         posPreview.needsDisplay = true
     }
 
-    @objc private func toggleDrag() { Prefs.dragEnabled = dragCheck.state == .on }
-    @objc private func toggleHotkeys() { Prefs.hotkeysEnabled = hotkeyCheck.state == .on }
     @objc private func toggleLogin() {
         LoginItemController.setEnabled(loginCheck.state == .on)
         loginCheck.state = LoginItemController.isEnabled ? .on : .off
@@ -572,7 +591,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     @objc private func statusIconChanged() { Prefs.showStatusIcon = statusIconCheck.state == .on }
     @objc private func namesChanged() { Prefs.showLayoutNames = namesCheck.state == .on }
     @objc private func warnChanged() { Prefs.warnOnFail = warnCheck.state == .on }
-    @objc private func animateChanged() { Prefs.animateWindows = animateCheck.state == .on }
     @objc private func groupChanged() { Prefs.autoGroupLayouts = groupCheck.state == .on }
     @objc private func stripThemeChanged() {
         if themeInkRadio.state == .on { Prefs.stripTheme = 0 }
@@ -581,8 +599,14 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         else if themeVioletRadio.state == .on { Prefs.stripTheme = 3 }
         refreshBackgroundWell()
     }
-    @objc private func bgDefaultClicked() { Prefs.stripBackground = 0 }
-    @objc private func bgWallpaperClicked() { Prefs.stripBackground = 1 }
+    @objc private func bgDefaultClicked() {
+        Prefs.stripBackground = 0
+        refreshBackgroundWell()
+    }
+    @objc private func bgWallpaperClicked() {
+        Prefs.stripBackground = 1
+        refreshBackgroundWell()
+    }
 
     // MARK: - 定位页动作
 
@@ -643,28 +667,14 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
 
     // MARK: - 小工具
 
-    private func sectionTitle(_ text: String) -> NSTextField {
-        let f = NSTextField(labelWithString: text)
-        f.font = .systemFont(ofSize: 13, weight: .semibold)
-        return f
-    }
-
-    private func captionText(_ text: String) -> NSTextField {
-        let f = NSTextField(labelWithString: text)
-        f.font = .systemFont(ofSize: 10)
-        f.textColor = .secondaryLabelColor
-        f.lineBreakMode = .byWordWrapping
-        f.maximumNumberOfLines = 2
-        return f
-    }
-
+    /// 快捷键徽章：等宽字体 + 圆角浅底
     private func keyBadge(_ text: String) -> NSTextField {
         let field = NSTextField(labelWithString: text)
-        field.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        field.font = Design.Font.monoBadge
         field.alignment = .center
         field.wantsLayer = true
-        field.layer?.cornerRadius = 5
-        field.layer?.backgroundColor = NSColor.quaternaryLabelColor.withAlphaComponent(0.25).cgColor
+        field.layer?.cornerRadius = Design.Radius.badge
+        field.layer?.backgroundColor = Design.Color.badgeFill.cgColor
         field.layer?.masksToBounds = true
         field.widthAnchor.constraint(equalToConstant: max(48, CGFloat(text.count) * 10 + 18)).isActive = true
         return field
@@ -693,11 +703,12 @@ final class ScreenPositionPreviewView: NSView {
         let screen = NSRect(x: bounds.midX - w / 2, y: bounds.midY - h / 2, width: w, height: h)
         let k = screen.width / vf.width   // 预览像素 / 实际点
 
-        let path = NSBezierPath(roundedRect: screen, xRadius: 10, yRadius: 10)
+        let path = NSBezierPath(roundedRect: screen,
+                                xRadius: Design.Radius.screenFrame, yRadius: Design.Radius.screenFrame)
         NSGraphicsContext.saveGraphicsState()
         path.addClip()
-        let grad = NSGradient(colors: [NSColor(red: 0.80, green: 0.87, blue: 0.95, alpha: 1),
-                                       NSColor(red: 0.34, green: 0.50, blue: 0.76, alpha: 1)])
+        // 预览即真实：迷你屏底色与布局图标共用同一条浅色壁纸色带
+        let grad = Design.Color.makeWallpaperGradient()
         grad?.draw(from: NSPoint(x: screen.midX, y: screen.maxY),
                    to: NSPoint(x: screen.midX, y: screen.minY), options: [])
         NSGraphicsContext.restoreGraphicsState()
@@ -705,15 +716,17 @@ final class ScreenPositionPreviewView: NSView {
         path.lineWidth = 1
         path.stroke()
 
-        // 布局图标条预览：真实屏幕等比 + 浅色风格图标
-            let rects = StripGeometry.iconRects(layoutCount: LayoutStore.layouts.count, in: vf)
-            let layouts = LayoutStore.layouts
-            for (i, r) in rects.enumerated() where layouts.indices.contains(i) {
-                let viewRect = CGRect(x: screen.minX + r.minX * k,
-                                      y: screen.minY + r.minY * k,
-                                      width: r.width * k,
-                                      height: r.height * k)
-                LayoutIconRenderer.draw(layout: layouts[i], in: viewRect, flipped: false, style: .light)
+        // 布局图标条预览：真实屏幕等比 + 浅色风格图标。
+        // iconRects 返回全局屏幕坐标，必须先减去 visibleFrame 原点再乘缩放系数，
+        // 否则菜单栏高度（vf.minY≈38pt）会被一起缩放，条的位置偏高（2026-11-13 修正）
+        let rects = StripGeometry.iconRects(layoutCount: LayoutStore.layouts.count, in: vf)
+        let layouts = LayoutStore.layouts
+        for (i, r) in rects.enumerated() where layouts.indices.contains(i) {
+            let viewRect = CGRect(x: screen.minX + (r.minX - vf.minX) * k,
+                                  y: screen.minY + (r.minY - vf.minY) * k,
+                                  width: r.width * k,
+                                  height: r.height * k)
+            LayoutIconRenderer.draw(layout: layouts[i], in: viewRect, flipped: false, style: .light)
         }
     }
 }
@@ -804,14 +817,15 @@ final class LayoutGridCanvasView: NSView {
     // MARK: 绘制（浅色壁纸 + 网格 + 深色区域，选中亮蓝描边）
 
     override func draw(_ dirtyRect: NSRect) {
-        let grad = NSGradient(colors: [NSColor(red: 0.80, green: 0.87, blue: 0.95, alpha: 1),
-                                       NSColor(red: 0.34, green: 0.50, blue: 0.76, alpha: 1)])
-        grad?.draw(from: NSPoint(x: bounds.midX, y: bounds.maxY),
-                   to: NSPoint(x: bounds.midX, y: bounds.minY), options: [])
+        // 画布底色与布局图标 .light 风格共用同一条浅色壁纸色带（预览即真实）
+        // 本视图翻转（isFlipped=true）：from=minY 才是视觉顶——翻转视图里 from=maxY 首色会落到视觉底部（实测）
+        let grad = Design.Color.makeWallpaperGradient()
+        grad?.draw(from: NSPoint(x: bounds.midX, y: bounds.minY),
+                   to: NSPoint(x: bounds.midX, y: bounds.maxY), options: [])
 
         let cw = bounds.width / CGFloat(cols)
         let ch = bounds.height / CGFloat(rows)
-        NSColor.white.withAlphaComponent(0.35).setStroke()
+        Design.Color.gridLineLight.setStroke()
         let grid = NSBezierPath()
         grid.lineWidth = 0.5
         for c in 1..<cols {
@@ -833,14 +847,16 @@ final class LayoutGridCanvasView: NSView {
                            y: bounds.minY + CGFloat(region.y1 - 1) * h,
                            width: CGFloat(region.x2 - region.x1 + 1) * w,
                            height: CGFloat(region.y2 - region.y1 + 1) * h)
-            let path = NSBezierPath(roundedRect: r.insetBy(dx: 1.5, dy: 1.5), xRadius: 4, yRadius: 4)
-            NSColor(red: 0.09, green: 0.14, blue: 0.23, alpha: 0.92).setFill()
+            let path = NSBezierPath(roundedRect: r.insetBy(dx: Design.Spacing.cellInsetDark,
+                                                           dy: Design.Spacing.cellInsetDark),
+                                    xRadius: Design.Radius.cell, yRadius: Design.Radius.cell)
+            Design.Color.cellInkFill.setFill()
             path.fill()
             if i == selectedIndex {
-                NSColor.white.withAlphaComponent(0.95).setStroke()
+                Design.Color.focusLine.setStroke()
                 path.lineWidth = 2.5
             } else {
-                NSColor(red: 0.38, green: 0.68, blue: 0.95, alpha: 0.85).setStroke()
+                Design.Color.cellAccentStroke.setStroke()
                 path.lineWidth = 1
             }
             path.stroke()
@@ -974,7 +990,7 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
 
         super.init()
 
-        window.title = isNew ? "新增布局" : "编辑布局：\(layout.name)"
+        window.title = isNew ? L("新增布局") : LF("编辑布局：%@", layout.name)
         // ARC 下必须为 false：true 会让 AppKit 在 close 时手动释放 ARC 持有的
         // NSWindow，造成过度释放，在下一次 autorelease pool drain 时闪退
         window.isReleasedWhenClosed = false
@@ -989,24 +1005,21 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 10
-        stack.edgeInsets = NSEdgeInsets(top: 18, left: 22, bottom: 18, right: 22)
+        stack.spacing = Design.Spacing.stackGap
+        stack.edgeInsets = Design.Spacing.pageInsets
         stack.translatesAutoresizingMaskIntoConstraints = false
 
         func label(_ t: String) -> NSTextField {
-            let f = NSTextField(labelWithString: t)
-            f.font = .systemFont(ofSize: 12)
-            return f
+            Design.Text.bodyLabel(t)
         }
         func fieldRow(_ views: [NSView]) -> NSStackView {
             let s = NSStackView(views: views)
             s.orientation = .horizontal
-            s.spacing = 8
+            s.spacing = Design.Spacing.groupGap
             return s
         }
 
         // 名称
-        nameField.font = .systemFont(ofSize: 13)
         nameField.widthAnchor.constraint(equalToConstant: 380).isActive = true
         nameField.delegate = self
         stack.addArrangedSubview(fieldRow([label(L("名称")), nameField]))
@@ -1019,14 +1032,14 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
         }
         shortcutRecorder.widthAnchor.constraint(equalToConstant: 380).isActive = true
         stack.addArrangedSubview(fieldRow([label(L("激活快捷键")), shortcutRecorder]))
-        stack.addArrangedSubview(captionText(L("点击录制；录制后按此快捷键把该布局应用到最前面的窗口。Shift+Esc 清除。—— 实际清除方式：点录制后按 Esc 取消。")))
+        stack.addArrangedSubview(Design.Text.caption(L("点击录制；录制后按此快捷键把该布局应用到最前面的窗口。Shift+Esc 清除。—— 实际清除方式：点录制后按 Esc 取消。"), wrapWidth: 480))
 
         // 作用域
         scopePopUp.addItem(withTitle: L("所有屏幕"))
         scopePopUp.lastItem?.representedObject = -1
         for screen in NSScreen.screens {
             let displayID = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID) ?? 0
-            scopePopUp.addItem(withTitle: "仅 \(screen.localizedName)")
+            scopePopUp.addItem(withTitle: LF("仅 %@", screen.localizedName))
             scopePopUp.lastItem?.representedObject = Int(displayID)
             if working.scope == Int(displayID) {
                 scopePopUp.select(scopePopUp.lastItem!)
@@ -1038,8 +1051,8 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
         stack.addArrangedSubview(fieldRow([label(L("可用屏幕")), scopePopUp]))
 
         // 网格密度
-        colsField.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
-        rowsField.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        colsField.font = Design.Font.monoField
+        rowsField.font = Design.Font.monoField
         colsField.alignment = .center
         rowsField.alignment = .center
         colsField.widthAnchor.constraint(equalToConstant: 48).isActive = true
@@ -1050,12 +1063,12 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
                                            label(L("（网格越细，区域越精确）"))]))
 
         // 屏幕布局画布
-        stack.addArrangedSubview(sectionCaption(L("屏幕布局")))
-        stack.addArrangedSubview(captionText(L("在网格上「按住拖动」画出区域；点住已画区域拖动可移动；画错点「删除所选区域」。")))
+        stack.addArrangedSubview(Design.Text.sectionTitle(L("屏幕布局")))
+        stack.addArrangedSubview(Design.Text.caption(L("在网格上「按住拖动」画出区域；点住已画区域拖动可移动；画错点「删除所选区域」。")))
         canvas.wantsLayer = true
         canvas.layer?.borderColor = NSColor.separatorColor.cgColor
         canvas.layer?.borderWidth = 1
-        canvas.layer?.cornerRadius = 4
+        canvas.layer?.cornerRadius = Design.Radius.insetFrame
         canvas.translatesAutoresizingMaskIntoConstraints = false
         canvas.widthAnchor.constraint(equalToConstant: 480).isActive = true
         canvas.heightAnchor.constraint(equalToConstant: 300).isActive = true
@@ -1078,11 +1091,11 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
         stack.setCustomSpacing(12, after: canvasRow)
 
         // 预览
-        stack.addArrangedSubview(sectionCaption(L("预览")))
+        stack.addArrangedSubview(Design.Text.sectionTitle(L("预览")))
         previewView.wantsLayer = true
         previewView.layer?.borderColor = NSColor.separatorColor.cgColor
         previewView.layer?.borderWidth = 1
-        previewView.layer?.cornerRadius = 4
+        previewView.layer?.cornerRadius = Design.Radius.insetFrame
         stack.addArrangedSubview(previewView)
         stack.setCustomSpacing(14, after: previewView)
 
@@ -1096,7 +1109,7 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
         buttons.orientation = .horizontal
         buttons.spacing = 10
         buttons.translatesAutoresizingMaskIntoConstraints = false
-        buttons.widthAnchor.constraint(equalToConstant: 490).isActive = true
+        buttons.widthAnchor.constraint(equalToConstant: 512).isActive = true   // 编辑器内容列宽（560 − pageInsets 48），取消/保存行右缘与列对齐
         flexible.setContentHuggingPriority(.defaultLow, for: .horizontal)
         stack.addArrangedSubview(buttons)
 
@@ -1109,22 +1122,6 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
             stack.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor),
         ])
         window.contentView = content
-    }
-
-    private func sectionCaption(_ t: String) -> NSTextField {
-        let f = NSTextField(labelWithString: t)
-        f.font = .systemFont(ofSize: 13, weight: .semibold)
-        return f
-    }
-
-    private func captionText(_ t: String) -> NSTextField {
-        let f = NSTextField(labelWithString: t)
-        f.font = .systemFont(ofSize: 10)
-        f.textColor = .secondaryLabelColor
-        f.lineBreakMode = .byWordWrapping
-        f.maximumNumberOfLines = 2
-        f.preferredMaxLayoutWidth = 480
-        return f
     }
 
     // MARK: 状态同步
@@ -1175,6 +1172,81 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
 }
 // MARK: - 布局列表表格（拖拽排序 / 双击编辑）
 
+/// 拖拽排序的插入位置指示线：强调色圆点 + 圆角横线，落在插入行边界上（系统拖放指示样式）
+final class LayoutDropIndicatorView: NSView {
+    private static let dotDiameter: CGFloat = 7
+    private static let lineThickness: CGFloat = 2
+    private static let edgeInset: CGFloat = 5
+
+    init() {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        autoresizingMask = [.width]   // 随表格宽度伸缩
+        isHidden = true
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    /// 显示在表格坐标 y（目标行的上边界；追加到末尾时为底边）
+    func show(atBoundaryY y: CGFloat, width: CGFloat) {
+        let d = Self.dotDiameter
+        frame = NSRect(x: Self.edgeInset, y: y - d / 2,
+                       width: max(0, width - Self.edgeInset * 2), height: d)
+        superview?.addSubview(self, positioned: .above, relativeTo: nil)  // 行视图陆续入列，保持指示线置顶
+        isHidden = false
+        needsDisplay = true
+    }
+
+    func hide() {
+        isHidden = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let d = Self.dotDiameter
+        let lineRect = NSRect(x: d / 2, y: (bounds.height - Self.lineThickness) / 2,
+                              width: bounds.width - d / 2, height: Self.lineThickness)
+        NSColor.controlAccentColor.setFill()
+        NSBezierPath(roundedRect: lineRect, xRadius: Self.lineThickness / 2, yRadius: Self.lineThickness / 2).fill()
+        NSBezierPath(ovalIn: NSRect(x: 0, y: 0, width: d, height: d)).fill()
+    }
+}
+
+/// 布局列表表格：托管插入指示线，并在拖拽离开/结束时收起
+final class LayoutListTableView: NSTableView {
+    private let dropLine = LayoutDropIndicatorView()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        addSubview(dropLine)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    /// 在第 row 行的上边界显示插入指示线（row == 行数即追加到末尾）
+    func showDropLine(atBoundaryRow row: Int) {
+        let step = rowHeight + intercellSpacing.height   // 无表头、行高一致，行边界即 row * step
+        dropLine.show(atBoundaryY: CGFloat(row) * step, width: bounds.width)
+    }
+
+    func hideDropLine() {
+        dropLine.hide()
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        super.draggingExited(sender)
+        hideDropLine()
+    }
+
+    override func draggingEnded(_ sender: NSDraggingInfo) {
+        super.draggingEnded(sender)
+        hideDropLine()
+    }
+}
+
 extension SettingsWindowController {
     func numberOfRows(in tableView: NSTableView) -> Int {
         LayoutStore.layouts.count
@@ -1190,26 +1262,26 @@ extension SettingsWindowController {
         cell.addSubview(thumb)
 
         let name = NSTextField(labelWithString: layout.name)
-        name.font = .systemFont(ofSize: 14, weight: .semibold)
+        name.font = Design.Font.listTitle
         name.frame = NSRect(x: 178, y: 64, width: 400, height: 20)
         cell.addSubview(name)
 
         let desc: String
         if let first = layout.regions.first {
             desc = layout.regions.count == 1
-                ? "\(layout.cols) × \(layout.rows) 网格，从 (\(first.x1), \(first.y1)) 到 (\(first.x2), \(first.y2))"
-                : "\(layout.cols) × \(layout.rows) 网格，\(layout.regions.count) 个区域"
+                ? LF("%d × %d 网格，从 (%d, %d) 到 (%d, %d)", layout.cols, layout.rows, first.x1, first.y1, first.x2, first.y2)
+                : LF("%d × %d 网格，%d 个区域", layout.cols, layout.rows, layout.regions.count)
         } else {
-            desc = "\(layout.cols) × \(layout.rows) 网格"
+            desc = LF("%d × %d 网格", layout.cols, layout.rows)
         }
         let descLabel = NSTextField(labelWithString: desc)
-        descLabel.font = .systemFont(ofSize: 12)
+        descLabel.font = Design.Font.body
         descLabel.textColor = .secondaryLabelColor
         descLabel.frame = NSRect(x: 178, y: 40, width: 440, height: 16)
         cell.addSubview(descLabel)
 
         let scopeLabel = NSTextField(labelWithString: layout.scope == -1 ? L("所有屏幕") : L("仅指定显示器"))
-        scopeLabel.font = .systemFont(ofSize: 11)
+        scopeLabel.font = Design.Font.hint
         scopeLabel.textColor = .tertiaryLabelColor
         scopeLabel.frame = NSRect(x: 178, y: 20, width: 300, height: 14)
         cell.addSubview(scopeLabel)
@@ -1234,9 +1306,13 @@ extension SettingsWindowController {
 
     func tableView(_ tableView: NSTableView, validateDrop info: NSDraggingInfo,
                    proposedRow row: Int, proposedDropOperation dropOperation: NSTableView.DropOperation) -> NSDragOperation {
-        guard info.draggingPasteboard.types?.contains(Self.layoutDragType) == true else { return [] }
+        guard info.draggingPasteboard.types?.contains(Self.layoutDragType) == true else {
+            layoutTable.hideDropLine()
+            return []
+        }
         // AppKit 默认提议 .on，必须主动改为 .above（插入语义）
         tableView.setDropRow(row, dropOperation: .above)
+        layoutTable.showDropLine(atBoundaryRow: row)   // 插入位置画一条强调色指示线
         return .move
     }
 
@@ -1251,6 +1327,7 @@ extension SettingsWindowController {
         let dst = min(max(row > src ? row - 1 : row, 0), list.count)
         list.insert(item, at: dst)
         LayoutStore.layouts = list
+        layoutTable.hideDropLine()
         tableView.reloadData()
         tableView.selectRowIndexes(IndexSet(integer: dst), byExtendingSelection: false)
         return true

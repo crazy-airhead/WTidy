@@ -108,7 +108,7 @@ final class HotkeyManager {
     func refresh() {
         unregisterAll()
 
-        guard Prefs.hotkeysEnabled, AccessibilityService.isTrusted else { return }
+        guard AccessibilityService.isTrusted else { return }
         installHandlerIfNeeded()
 
         for (index, action) in SnapAction.allCases.enumerated() {

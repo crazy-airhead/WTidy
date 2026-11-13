@@ -6,8 +6,6 @@ enum Prefs {
 
     enum Keys {
         static let onboardingDone = "onboardingCompleted"
-        static let dragEnabled = "dragSnappingEnabled"
-        static let hotkeysEnabled = "hotkeysEnabled"
         static let windowGap = "windowGap"
         static let lastSnap = "lastSnapDescription"
         static let hotkeyEnabledPrefix = "hotkey.enabled."
@@ -22,8 +20,7 @@ enum Prefs {
         static let showStatusIcon = "showStatusIcon"
         static let showLayoutNames = "showLayoutNames"
         static let warnOnFail = "warnOnFail"
-        static let stripBackground = "stripBackground" // 0=默认深色 1=桌面壁纸
-        static let animateWindows = "animateWindows"   // 原版 AnimateWindows
+        static let stripBackground = "stripBackground" // 0=默认背景 1=桌面壁纸
         static let autoGroupLayouts = "autoGroupLayouts" // 原版 AutoGroupLayouts
         static let stripTheme = "stripTheme.v2"        // 图标条配色主题（v2：移除原版蓝后重置）
     }
@@ -31,16 +28,6 @@ enum Prefs {
     static var onboardingDone: Bool {
         get { defaults.bool(forKey: Keys.onboardingDone) }
         set { set(newValue, forKey: Keys.onboardingDone) }
-    }
-
-    static var dragEnabled: Bool {
-        get { defaults.object(forKey: Keys.dragEnabled) == nil ? true : defaults.bool(forKey: Keys.dragEnabled) }
-        set { set(newValue, forKey: Keys.dragEnabled) }
-    }
-
-    static var hotkeysEnabled: Bool {
-        get { defaults.object(forKey: Keys.hotkeysEnabled) == nil ? true : defaults.bool(forKey: Keys.hotkeysEnabled) }
-        set { set(newValue, forKey: Keys.hotkeysEnabled) }
     }
 
     /// 吸附后窗口之间的间隙（点），0 = 完全贴合（原版行为）
@@ -137,16 +124,10 @@ enum Prefs {
         set { set(newValue, forKey: Keys.warnOnFail) }
     }
 
-    /// 图标条背景：0=默认深色，1=桌面壁纸
+    /// 图标条背景：0=默认背景，1=桌面壁纸
     static var stripBackground: Int {
         get { defaults.integer(forKey: Keys.stripBackground) }
         set { set(newValue, forKey: Keys.stripBackground) }
-    }
-
-    /// 吸附动画（原版 AnimateWindows）
-    static var animateWindows: Bool {
-        get { defaults.object(forKey: Keys.animateWindows) == nil ? true : defaults.bool(forKey: Keys.animateWindows) }
-        set { set(newValue, forKey: Keys.animateWindows) }
     }
 
     /// 自动分组相邻互补布局（原版 AutoGroupLayouts）

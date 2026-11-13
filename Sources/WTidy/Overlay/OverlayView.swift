@@ -1,63 +1,5 @@
 import AppKit
 
-/// 拖拽图标条 / 快速布局面板的配色主题（行为页「图标条配色」可选）
-enum StripTheme {
-    case ink        // 墨蓝（默认）：深藏青底 + 雾蓝块
-    case graphite   // 石墨
-    case teal       // 青碧
-    case violet     // 紫罗兰
-
-    static func at(_ index: Int) -> StripTheme {
-        [StripTheme.ink, .graphite, .teal, .violet][max(0, min(3, index))]
-    }
-
-    var bgColors: [NSColor] {
-        switch self {
-        case .ink:     return [NSColor(red: 0.13, green: 0.17, blue: 0.26, alpha: 1),
-                               NSColor(red: 0.09, green: 0.12, blue: 0.19, alpha: 1)]
-        case .graphite: return [NSColor(red: 0.18, green: 0.18, blue: 0.19, alpha: 1),
-                                NSColor(red: 0.11, green: 0.11, blue: 0.12, alpha: 1)]
-        case .teal:    return [NSColor(red: 0.05, green: 0.17, blue: 0.19, alpha: 1),
-                               NSColor(red: 0.03, green: 0.11, blue: 0.13, alpha: 1)]
-        case .violet:  return [NSColor(red: 0.16, green: 0.10, blue: 0.25, alpha: 1),
-                               NSColor(red: 0.10, green: 0.06, blue: 0.17, alpha: 1)]
-        }
-    }
-
-    var cellFill: NSColor {
-        switch self {
-        case .ink:     return NSColor(red: 0.44, green: 0.65, blue: 0.94, alpha: 0.92)
-        case .graphite: return NSColor(red: 0.82, green: 0.82, blue: 0.84, alpha: 0.88)
-        case .teal:    return NSColor(red: 0.25, green: 0.78, blue: 0.74, alpha: 0.92)
-        case .violet:  return NSColor(red: 0.71, green: 0.55, blue: 0.95, alpha: 0.92)
-        }
-    }
-
-    var cellStroke: NSColor {
-        NSColor.white.withAlphaComponent(0.30)
-    }
-
-    /// 悬停投影命中的区域块（亮色填充，与压暗的其余块强对比）
-    var activeCellFill: NSColor {
-        switch self {
-        case .ink:     return NSColor(red: 0.95, green: 0.97, blue: 1.00, alpha: 0.97)
-        case .graphite: return NSColor(red: 1.00, green: 1.00, blue: 1.00, alpha: 0.97)
-        case .teal:    return NSColor(red: 0.75, green: 1.00, blue: 0.95, alpha: 0.97)
-        case .violet:  return NSColor(red: 0.90, green: 0.82, blue: 1.00, alpha: 0.97)
-        }
-    }
-
-    /// 选中区域的描边（醒目强调色）
-    var activeCellStroke: NSColor {
-        switch self {
-        case .ink:     return NSColor(red: 0.30, green: 0.55, blue: 0.95, alpha: 1)
-        case .graphite: return NSColor(red: 0.9, green: 0.9, blue: 0.9, alpha: 1)
-        case .teal:    return NSColor(red: 0.10, green: 0.65, blue: 0.60, alpha: 1)
-        case .violet:  return NSColor(red: 0.55, green: 0.35, blue: 0.90, alpha: 1)
-        }
-    }
-}
-
 /// Overlay 的全部绘制状态（矩形均为 AppKit 全局屏幕坐标，由 view 自行转换）
 struct OverlayModel {
     /// 顶部布局缩略图条：每项 { 图标rect, 布局, 投影命中的区域下标 }
@@ -79,6 +21,21 @@ final class OverlayView: NSView {
         didSet { needsDisplay = true }
     }
 
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        // 设置页改偏好即时生效：拖拽中 overlay 可见时同步重绘（背景/主题/名称等）
+        NotificationCenter.default.addObserver(self, selector: #selector(prefsChanged),
+                                               name: .prefsChanged, object: nil)
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func prefsChanged() { needsDisplay = true }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) 未实现") }
+
     override var isFlipped: Bool { true }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -88,21 +45,24 @@ final class OverlayView: NSView {
             for (i, zone) in model.zones.enumerated() {
                 let z = convert(zone)
                 let hovered = (i == model.hoveredZoneIndex)
-                let path = NSBezierPath(roundedRect: z.insetBy(dx: 3, dy: 3), xRadius: 10, yRadius: 10)
+                let path = NSBezierPath(roundedRect: z.insetBy(dx: 3, dy: 3),
+                                        xRadius: Design.Radius.zone, yRadius: Design.Radius.zone)
                 if hovered {
-                    let outer = NSBezierPath(roundedRect: z.insetBy(dx: 2, dy: 2), xRadius: 10, yRadius: 10)
-                    NSColor.black.withAlphaComponent(0.45).setStroke()
+                    let outer = NSBezierPath(roundedRect: z.insetBy(dx: 2, dy: 2),
+                                             xRadius: Design.Radius.zone, yRadius: Design.Radius.zone)
+                    Design.Color.zoneHoverShadow.setStroke()
                     outer.lineWidth = 4
                     outer.stroke()
-                    NSColor.white.withAlphaComponent(0.98).setStroke()
+                    Design.Color.zoneHoverLine.setStroke()
                     path.lineWidth = 3
                     path.stroke()
                 } else {
-                    let outer = NSBezierPath(roundedRect: z.insetBy(dx: 2, dy: 2), xRadius: 10, yRadius: 10)
-                    NSColor.black.withAlphaComponent(0.22).setStroke()
+                    let outer = NSBezierPath(roundedRect: z.insetBy(dx: 2, dy: 2),
+                                             xRadius: Design.Radius.zone, yRadius: Design.Radius.zone)
+                    Design.Color.zoneIdleShadow.setStroke()
                     outer.lineWidth = 2
                     outer.stroke()
-                    NSColor.white.withAlphaComponent(0.45).setStroke()
+                    Design.Color.zoneIdleLine.setStroke()
                     path.lineWidth = 1.5
                     path.stroke()
                 }
@@ -115,44 +75,31 @@ final class OverlayView: NSView {
     private func drawStrip() {
         guard !model.strip.isEmpty else { return }
         let rects = model.strip.map { convert($0.rect) }
-        let union = rects.reduce(rects[0]) { $0.union($1) }
-        let card = union.insetBy(dx: -OverlayMetrics.stripPadding, dy: -OverlayMetrics.stripPadding)
-
-        // 底卡（对齐原版 Background：默认深色 / 桌面壁纸）
-        let cardPath = NSBezierPath(roundedRect: card, xRadius: 14, yRadius: 14)
-        if Prefs.stripBackground == 1, let wallpaper = wallpaperImage() {
-            NSGraphicsContext.saveGraphicsState()
-            let clip = NSBezierPath(roundedRect: card, xRadius: 14, yRadius: 14)
-            clip.addClip()
-            wallpaper.draw(in: card, from: .zero, operation: .sourceOver, fraction: 1)
-            NSColor.black.withAlphaComponent(0.45).setFill()
-            card.fill(using: .sourceOver)
-            NSGraphicsContext.restoreGraphicsState()
-        } else {
-            NSColor.black.withAlphaComponent(0.58).setFill()
-            cardPath.fill()
-        }
-
+        // 图标条本体不画底卡/边框（原版语义：「背景」是每个布局图标的背景，不是整条的底）；
+        // 每个图标各自铺底：默认背景=主题渐变，「使用桌面壁纸」=本屏壁纸+压暗蒙板
+        let wallpaper = Prefs.stripBackground == 1 ? wallpaperImage() : nil
         for (i, item) in model.strip.enumerated() {
             LayoutIconRenderer.draw(layout: item.layout,
                                     in: rects[i],
                                     flipped: true,   // 本视图翻转坐标
                                     hovered: i == model.hoveredStripIndex,
                                     showName: Prefs.showLayoutNames,
-                                    activeRegion: item.activeRegion)
+                                    activeRegion: item.activeRegion,
+                                    wallpaper: wallpaper)
         }
     }
 
-    /// 桌面壁纸缓存（按屏幕 UUID），避免 30Hz 重取
+    /// 桌面壁纸缓存（key = 屏幕 UUID + 壁纸路径），避免 30Hz 重取；
+    /// 换壁纸后 URL 变化 → key 变化，旧条目自然失效，无需监听系统通知
     private static var wallpaperCache: [String: NSImage] = [:]
 
     private func wallpaperImage() -> NSImage? {
         guard let win = window, let screen = win.screen ?? NSScreen.main else { return nil }
         let uuid = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID ?? 0
-        let key = "\(uuid)-\(screen.localizedName)"
+        guard let url = NSWorkspace.shared.desktopImageURL(for: screen) else { return nil }
+        let key = "\(uuid)-\(url.path)"
         if let cached = Self.wallpaperCache[key] { return cached }
-        guard let url = NSWorkspace.shared.desktopImageURL(for: screen),
-              let image = NSImage(contentsOf: url) else { return nil }
+        guard let image = NSImage(contentsOf: url) else { return nil }
         Self.wallpaperCache[key] = image
         return image
     }
@@ -178,7 +125,8 @@ enum OverlayMetrics {
 
 /// 单个布局图标的绘制（overlay 条 / 定位预览 / 快速布局面板共用，保证视觉一致）。
 /// 两种风格（对齐原版的两处用法）：
-/// - .dark：拖拽图标条与快速布局面板——深藏青底 + 白网格 + 白色区域块
+/// - .dark：拖拽图标条与快速布局面板——主题深底 + 白网格 + 白色区域块；
+///   「使用桌面壁纸」时底色换成本屏桌面壁纸（+ stripWallpaperVeil 蒙板）
 /// - .light：设置页缩略图与屏幕位置预览——银蓝壁纸底 + 白网格 + 深色区域块（亮蓝描边）
 enum LayoutIconRenderer {
     enum Style {
@@ -189,13 +137,17 @@ enum LayoutIconRenderer {
     /// flipped：所在视图是否翻转坐标（y 向下）——区域块的 y 映射随之变化。
     /// theme：.dark 风格下的配色主题（行为页「图标条配色」）。
     /// activeRegion：投影命中的区域下标——该区域块以高亮色绘制（「拖到这里了」的即时反馈）。
+    /// wallpaper：图标条「使用桌面壁纸」时传入——整图缩放铺进图标当底色（+压暗蒙板）；
+    /// nil 时 .dark 铺主题渐变、.light 铺浅色壁纸色带。
     static func draw(layout: TidyLayout, in rect: CGRect, flipped: Bool,
                      style: Style = .dark,
                      hovered: Bool = false, showName: Bool = false,
                      theme: StripTheme = .at(Prefs.stripTheme),
-                     activeRegion: Int? = nil) {
+                     activeRegion: Int? = nil,
+                     wallpaper: NSImage? = nil) {
         NSGraphicsContext.saveGraphicsState()
-        let clip = NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8)
+        let clip = NSBezierPath(roundedRect: rect,
+                                xRadius: Design.Radius.icon, yRadius: Design.Radius.icon)
         clip.addClip()
 
         func cellRect(_ nr: CGRect) -> CGRect {
@@ -209,29 +161,40 @@ enum LayoutIconRenderer {
                           height: nr.height * rect.height)
         }
 
-        // 1) 底色渐变（视觉顶→底）
-        let space = NSColorSpace.deviceRGB
-        let colors: [NSColor]
-        let locations: [CGFloat]
-        switch style {
-        case .dark:
-            colors = theme.bgColors
-            locations = [0, 1]
-        case .light:
-            colors = [NSColor(red: 0.80, green: 0.87, blue: 0.95, alpha: 1),
-                      NSColor(red: 0.52, green: 0.67, blue: 0.86, alpha: 1),
-                      NSColor(red: 0.34, green: 0.50, blue: 0.76, alpha: 1)]
-            locations = [0, 0.55, 1]
+        // 1) 底色（视觉顶→底）：壁纸模式整图缩放铺壁纸 + 蒙板；
+        //    否则 .dark 用主题底色，.light 用全应用唯一的浅色壁纸色带
+        if let wallpaper {
+            // 翻转视图必须 respectFlipped:true——默认 draw(in:from:) 在翻转视图里上下颠倒
+            // （实测定论：翻转视图 img-default=倒、respectFlipped:true=正；非翻转视图两者皆正）
+            wallpaper.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1,
+                           respectFlipped: flipped, hints: nil)
+            Design.Color.stripWallpaperVeil.setFill()
+            rect.fill(using: .sourceOver)
+        } else {
+            let colors: [NSColor]
+            let locations: [CGFloat]
+            switch style {
+            case .dark:
+                colors = theme.bgColors
+                locations = [0, 1]
+            case .light:
+                colors = [Design.Color.wallpaperRampTop, Design.Color.wallpaperRampMid, Design.Color.wallpaperRampBottom]
+                locations = Design.Color.wallpaperRampLocations
+            }
+            let grad = NSGradient(colors: colors, atLocations: locations, colorSpace: NSColorSpace.deviceRGB)
+            // 视觉顶→底：翻转视图 minY 是视觉顶，非翻转视图 maxY 是视觉顶
+            // （实测：翻转视图 from=minY 才首色在顶；from=maxY 的旧注释「两种坐标系都是视觉顶」是错的）
+            let topY = flipped ? rect.minY : rect.maxY
+            let bottomY = flipped ? rect.maxY : rect.minY
+            grad?.draw(from: NSPoint(x: rect.minX, y: topY),
+                       to: NSPoint(x: rect.minX, y: bottomY),
+                       options: [])
         }
-        let grad = NSGradient(colors: colors, atLocations: locations, colorSpace: space)
-        grad?.draw(from: NSPoint(x: rect.minX, y: rect.maxY),   // 顶（两种坐标系都是视觉顶）
-                   to: NSPoint(x: rect.minX, y: rect.minY),
-                   options: [])
 
         // 2) 网格线（cols×rows，细线）
         let cw = rect.width / CGFloat(layout.cols)
         let ch = rect.height / CGFloat(layout.rows)
-        NSColor.white.withAlphaComponent(style == .dark ? 0.28 : 0.40).setStroke()
+        (style == .dark ? Design.Color.gridLineDark : Design.Color.gridLineLight).setStroke()
         let grid = NSBezierPath()
         grid.lineWidth = 0.5
         for c in 1..<layout.cols {
@@ -247,10 +210,16 @@ enum LayoutIconRenderer {
         grid.stroke()
 
         // 3) 区域块（定位框内部）：投影命中的区域块高亮成亮色，
-        //    其余区域块压暗——图标内部的选中/未选中对比拉满
+        //    其余区域块压暗——图标内部的选中/未选中对比拉满。
+        //    .dark 内缩 1.5 固定（拖拽条图标 52–87pt 高，占比 ≤3%）。
+        //    .light 的 3pt 是 84pt 参考高度（列表缩略图）的目标值；更小的图标
+        //    （定位页预览约 28pt 高）按高度 7% 收缩——绝对内缩会吃掉 40%+ 高度，
+        //    区域块「漂浮」在卡片中央，rows=1 布局全部变形（2026-11-13 用户截图实测）。
+        let cellInset = style == .dark ? Design.Spacing.cellInsetDark
+                                       : min(Design.Spacing.cellInsetLight, rect.height * 0.07)
         for (ri, nr) in layout.normalizedRects.enumerated() {
-            let cellPath = NSBezierPath(roundedRect: cellRect(nr).insetBy(dx: 1.5, dy: 1.5),
-                                        xRadius: 4, yRadius: 4)
+            let cellPath = NSBezierPath(roundedRect: cellRect(nr).insetBy(dx: cellInset, dy: cellInset),
+                                        xRadius: Design.Radius.cell, yRadius: Design.Radius.cell)
             switch style {
             case .dark:
                 if ri == activeRegion {
@@ -265,8 +234,8 @@ enum LayoutIconRenderer {
                     theme.cellStroke.setStroke()
                 }
             case .light:
-                NSColor(red: 0.09, green: 0.14, blue: 0.23, alpha: 0.94).setFill()
-                NSColor(red: 0.38, green: 0.68, blue: 0.95, alpha: 0.85).setStroke()
+                Design.Color.cellInkFill.setFill()
+                Design.Color.cellAccentStroke.setStroke()
             }
             cellPath.lineWidth = 1
             cellPath.fill()
@@ -277,26 +246,29 @@ enum LayoutIconRenderer {
         NSGraphicsContext.restoreGraphicsState()
 
         // 外框
-        let border = NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8)
+        let border = NSBezierPath(roundedRect: rect,
+                                  xRadius: Design.Radius.icon, yRadius: Design.Radius.icon)
         if hovered {
-            NSColor.white.withAlphaComponent(0.95).setStroke()
+            Design.Color.focusLine.setStroke()
             border.lineWidth = 2
         } else {
-            NSColor.white.withAlphaComponent(style == .dark ? 0.7 : 0.55).setStroke()
+            (style == .dark ? Design.Color.iconBorderDarkIdle : Design.Color.iconBorderLightIdle).setStroke()
             border.lineWidth = 1
         }
         border.stroke()
 
         // 名称标注（Options：「Show layout names on Layout Icons」）
         if showName {
-            let bandY = flipped ? rect.minY : rect.maxY - 15
-            let band = CGRect(x: rect.minX, y: bandY, width: rect.width, height: 15)
-            let bandPath = NSBezierPath(roundedRect: band, xRadius: 6, yRadius: 6)
-            NSColor.black.withAlphaComponent(0.55).setFill()
+            let bandH = Design.Spacing.nameBandHeight
+            let bandY = flipped ? rect.minY : rect.maxY - bandH
+            let band = CGRect(x: rect.minX, y: bandY, width: rect.width, height: bandH)
+            let bandPath = NSBezierPath(roundedRect: band,
+                                        xRadius: Design.Radius.nameBand, yRadius: Design.Radius.nameBand)
+            Design.Color.iconNameBandFill.setFill()
             bandPath.fill()
             let attrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: 9, weight: .medium),
-                .foregroundColor: NSColor.white.withAlphaComponent(0.95),
+                .font: Design.Font.iconName,
+                .foregroundColor: Design.Color.nameBandText,
             ]
             let text = NSAttributedString(string: layout.name, attributes: attrs)
             let textSize = text.size()

@@ -6,7 +6,6 @@ final class StatusMenuController: NSObject {
     enum State {
         case ok            // 正常监听（绿点）
         case noPermission  // 缺辅助功能权限（黄叹号）
-        case paused        // 拖拽功能被用户关闭（灰）
     }
 
     struct Hooks {
@@ -97,17 +96,12 @@ final class StatusMenuController: NSObject {
             statusLine.attributedTitle = Self.dotTitle(L("缺少辅助功能权限"), color: .systemYellow,
                                                        detail: L("点此打开系统设置授权"))
             startAttractPulse()
-        case .paused:
-            statusItem.button?.image = Self.symbolImage("rectangle.split.2x2", tint: nil, alpha: 0.35)
-            statusItem.button?.alphaValue = 1
-            statusLine.attributedTitle = Self.dotTitle(L("拖拽分屏已暂停"), color: .systemGray,
-                                                       detail: L("在设置中重新开启"))
         }
     }
 
     /// attract 脉冲：0.6s 闪烁，授权后自动停止
     private func startAttractPulse() {
-        let timer = Timer(timeInterval: 0.6, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: Design.Motion.attractPulseInterval, repeats: true) { [weak self] _ in
             guard let button = self?.statusItem.button else { return }
             button.alphaValue = button.alphaValue > 0.5 ? 0.35 : 1
         }
@@ -164,16 +158,16 @@ final class StatusMenuController: NSObject {
         para.lineBreakMode = .byTruncatingTail
         let s = NSMutableAttributedString()
         s.append(NSAttributedString(string: L("● "), attributes: [
-            .foregroundColor: color, .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
+            .foregroundColor: color, .font: Design.Font.menuDot,
             .paragraphStyle: para,
         ]))
         s.append(NSAttributedString(string: text + "  ", attributes: [
-            .font: NSFont.menuFont(ofSize: 13),
+            .font: Design.Font.menuTitle,
             .paragraphStyle: para,
         ]))
         s.append(NSAttributedString(string: detail, attributes: [
             .foregroundColor: NSColor.secondaryLabelColor,
-            .font: NSFont.menuFont(ofSize: 11),
+            .font: Design.Font.menuDetail,
             .paragraphStyle: para,
         ]))
         return s
@@ -273,8 +267,9 @@ extension StatusMenuController: NSMenuDelegate {
                                y: inner.minY + (1 - nr.maxY) * inner.height,
                                width: nr.width * inner.width,
                                height: nr.height * inner.height)
-                NSColor.controlAccentColor.withAlphaComponent(0.8).setFill()
-                NSBezierPath(roundedRect: r.insetBy(dx: 0.5, dy: 0.5), xRadius: 2, yRadius: 2).fill()
+                Design.Color.menuMiniFill.setFill()
+                NSBezierPath(roundedRect: r.insetBy(dx: 0.5, dy: 0.5),
+                             xRadius: Design.Radius.menuMini, yRadius: Design.Radius.menuMini).fill()
             }
             icon.unlockFocus()
             item.image = icon
@@ -297,7 +292,6 @@ extension StatusMenuController: NSMenuDelegate {
 
     private var currentRenderState: State {
         if !AccessibilityService.isTrusted { return .noPermission }
-        if !Prefs.dragEnabled { return .paused }
         return .ok
     }
 }

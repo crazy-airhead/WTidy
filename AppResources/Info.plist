@@ -38,6 +38,6 @@
 	<key>NSAccessibilityUsageDescription</key>
 	<string>WTidy 需要辅助功能权限来检测窗口拖拽，以及调整窗口的位置和大小实现分屏。</string>
 	<key>NSHumanReadableCopyright</key>
-	<string>Copyright © 2026. 重制致敬 Window Tidy (Light Pillar)。</string>
+	<string>Copyright © 2026 WTidy.</string>
 </dict>
 </plist>

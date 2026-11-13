@@ -42,7 +42,6 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
     private func handleAXEvent(_ event: AccessibilityService.Event) {
         switch event {
         case .windowDidMove(let window):
-            guard Prefs.dragEnabled else { return }
             guard let frame = window.nsFrame else { return }
             watcher.registerMove(window, frame: frame)
 
@@ -228,7 +227,6 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
     // MARK: - 快捷键路径
 
     func snapFrontmost(_ action: SnapAction) {
-        guard Prefs.hotkeysEnabled else { return }
         guard AccessibilityService.isTrusted else {
             AppLog.warn("快捷键触发但缺少辅助功能权限")
             return
@@ -253,7 +251,7 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
                 return
             }
             WindowAnimator.apply(win, to: original) { [weak self] in
-                self?.onSnapApplied?("恢复原位置 · \(screen.localizedName)")
+                self?.onSnapApplied?(LF("恢复原位置 · %@", screen.localizedName))
             }
             frameMemory.remove(key: key)
 
@@ -262,7 +260,7 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
             rememberIfNeeded(win)
             let rect = SnapEngine.centeredRect(size: size, in: vf)
             WindowAnimator.apply(win, to: rect) { [weak self] in
-                self?.onSnapApplied?("居中（保持尺寸） · \(screen.localizedName)")
+                self?.onSnapApplied?(LF("居中（保持尺寸） · %@", screen.localizedName))
             }
 
         default:
@@ -451,7 +449,7 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
                 if deviation > 5 {
                     AppLog.warn("SNAP 偏差 \(Int(deviation))pt '\(win.title ?? "?")' 目标=\(rect) 实际=\(actual)")
                     if Prefs.warnOnFail {
-                        desc = "⚠️ 未能完全调整尺寸（偏差 \(Int(deviation))pt）— " + desc
+                        desc = LF("⚠️ 未能完全调整尺寸（偏差 %dpt）— ", Int(deviation)) + desc
                     }
                 }
             }

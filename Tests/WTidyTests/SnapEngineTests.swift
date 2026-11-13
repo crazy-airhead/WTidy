@@ -193,6 +193,27 @@ struct SnapEngineTests {
         #expect(LayoutStore.layouts.count == TidyLayout.builtins.count)
     }
 
+    @Test func staleBuiltinEntriesCanonicalized() {
+        // 历史迭代的内置布局残留：id 不在当前内置表、但结构与 wideNarrow 全等、
+        // 名称是历史内置默认名（「左 2/3」）→ 读取时应收编为 wideNarrow（保留激活快捷键）
+        var stale = TidyLayout(id: "user-made", name: "左 2/3", cols: 3, rows: 1,
+                               regions: [.init(3, 1, 3, 1), .init(1, 1, 2, 1)])   // 区域乱序画出
+        stale.activationKeyCode = 44
+        stale.activationModifiers = 5
+        // 结构同内置但名称是自定义 → 永不收编（避免吞掉用户故意改名的布局）
+        let custom = TidyLayout(id: "custom-x", name: "我的布局", cols: 3, rows: 1,
+                                regions: [.init(1, 1, 2, 1), .init(3, 1, 3, 1)])
+        LayoutStore.layouts = [stale, custom]
+        let list = LayoutStore.layouts
+        #expect(list.count == 2)
+        #expect(list[0].id == "wideNarrow")
+        #expect(list[0].name == L("左 2/3 + 右 1/3"))
+        #expect(list[0].activationKeyCode == 44)
+        #expect(list[0].activationModifiers == 5)
+        #expect(list[1].id == "custom-x")
+        #expect(list[1].name == "我的布局")
+    }
+
     // MARK: - 快捷键映射
 
     @Test func layoutAndZoneMapping() {

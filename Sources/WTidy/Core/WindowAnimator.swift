@@ -11,9 +11,9 @@ import AppKit
 enum WindowAnimator {
     private static let queue = DispatchQueue(label: "com.allblue.wtidy.animate", qos: .userInteractive)
 
-    /// 动画或直接应用目标 frame（Prefs.animateWindows 关闭时直接落位）
+    /// 动画或直接应用目标 frame（拿不到当前 frame 时直接落位）
     static func apply(_ win: AXWindow, to target: CGRect, completion: (() -> Void)? = nil) {
-        guard Prefs.animateWindows, let from = win.nsFrame else {
+        guard let from = win.nsFrame else {
             win.setNSFrame(target)
             DispatchQueue.main.async(execute: completion ?? {})
             return
@@ -36,18 +36,20 @@ enum WindowAnimator {
     }
 
     /// 同屏插值：位置与尺寸同步渐进
-    private static func animateInterpolated(_ win: AXWindow, from: CGRect, to: CGRect, steps: Int = 10) {
+    private static func animateInterpolated(_ win: AXWindow, from: CGRect, to: CGRect,
+                                            steps: Int = Design.Motion.sameScreenSteps) {
         for step in 1...steps {
             let t = CGFloat(step) / CGFloat(steps)
             let eased = t * t * (3 - 2 * t)   // smoothstep 缓动
             let frame = interpolate(from, to, t: eased)
             win.setNSFrame(frame)
-            Thread.sleep(forTimeInterval: 0.016)
+            Thread.sleep(forTimeInterval: Design.Motion.frameInterval)
         }
     }
 
     /// 跨屏三阶段（原版："Move to interim origin with room to resize" → resize → "Move to final position"）
-    private static func animateCrossScreen(_ win: AXWindow, from: CGRect, to: CGRect, steps: Int = 8) {
+    private static func animateCrossScreen(_ win: AXWindow, from: CGRect, to: CGRect,
+                                           steps: Int = Design.Motion.crossScreenSteps) {
         guard let targetScreen = NSScreen.screens.first(where: { $0.frame.contains(CGPoint(x: to.midX, y: to.midY)) })
                 ?? NSScreen.main else {
             win.setNSFrame(to)
@@ -65,7 +67,7 @@ enum WindowAnimator {
         // 阶段 2：在原点处调整到目标尺寸
         let resized = CGRect(origin: interim.origin, size: to.size)
         win.setNSFrame(resized)
-        Thread.sleep(forTimeInterval: 0.03)
+        Thread.sleep(forTimeInterval: Design.Motion.crossScreenResizeHold)
 
         // 阶段 3：移动到最终位置
         animateInterpolated(win, from: resized, to: to, steps: steps)
