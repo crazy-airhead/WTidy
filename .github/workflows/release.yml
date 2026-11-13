@@ -1,0 +1,72 @@
+name: Release
+
+# tag 驱动的应用发布：推 v* 标签 → 构建 WTidy.app → zip → GitHub Release
+# 版本号以标签为唯一真源，构建时注入 Info.plist。
+# workflow_dispatch 仅验证构建产物（不注入版本、不发布），产物在 Actions 工件里下载。
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: 注入版本号（tag 为唯一真源）
+        if: github.event_name == 'push'
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          plutil -replace CFBundleShortVersionString -string "$VERSION" AppResources/Info.plist
+          plutil -replace CFBundleVersion -string "$VERSION" AppResources/Info.plist
+          echo "已注入版本 $VERSION（注入发生在组包签名之前，不破坏 ad-hoc 签名）"
+
+      - name: 构建与组包（swift build + ad-hoc 签名）
+        run: scripts/build-app.sh
+
+      - name: 打包 zip
+        run: |
+          VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' build/WTidy.app/Contents/Info.plist)"
+          ZIP="WTidy-${VERSION}-macos-arm64.zip"
+          ditto -c -k --sequesterRsrc --keepParent build/WTidy.app "$ZIP"
+          echo "ZIP_NAME=$ZIP" >> "$GITHUB_ENV"
+          ls -la "$ZIP"
+          unzip -l "$ZIP" | head -20
+
+      - name: 上传构建产物（workflow_dispatch 验证用）
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ZIP_NAME }}
+          path: ${{ env.ZIP_NAME }}
+          retention-days: 7
+
+      - name: 发布 GitHub Release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ZIP_NAME }}
+          generate_release_notes: true
+          body: |
+            WTidy ${{ github.ref_name }} —— 原生重制的 macOS 窗口分屏工具
+
+            下载下方 `WTidy-*-macos-arm64.zip`，解压后将 `WTidy.app` 拖入「应用程序」。
+
+            > **macOS 未公证提示**：应用为 ad-hoc 签名，首次打开若提示无法验证开发者，
+            > **右键 App →「打开」**，或执行 `xattr -d com.apple.quarantine /Applications/WTidy.app` 后再打开。
+
+            - Apple Silicon（arm64）原生，需 macOS 13.0 及以上
+            - 首次启动请在 系统设置 → 隐私与安全性 → 辅助功能 中授权 WTidy
+            - 使用文档：https://crazy-airhead.github.io/WTidy/
+            - 完整变更：https://crazy-airhead.github.io/WTidy/changelog

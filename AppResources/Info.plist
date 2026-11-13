@@ -4,40 +4,40 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>WTidy</string>
+	<key>CFBundleExecutable</key>
+	<string>WTidy</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.allblue.wtidy</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
 	<key>CFBundleLocalizations</key>
 	<array>
 		<string>en</string>
 		<string>zh-Hans</string>
 	</array>
-	<key>CFBundleExecutable</key>
-	<string>WTidy</string>
-	<key>CFBundleIdentifier</key>
-	<string>com.allblue.wtidy</string>
-	<key>CFBundleInfoDictionaryVersion</key>
-	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>WTidy</string>
-	<key>CFBundleDisplayName</key>
 	<string>WTidy</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.0</string>
-	<key>CFBundleVersion</key>
-	<string>1</string>
-	<key>CFBundleIconFile</key>
-	<string>AppIcon</string>
+	<string>0.1.0</string>
 	<key>CFBundleSignature</key>
 	<string>WTDY</string>
+	<key>CFBundleVersion</key>
+	<string>0.1.0</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
 	<key>LSUIElement</key>
 	<true/>
-	<key>NSPrincipalClass</key>
-	<string>NSApplication</string>
 	<key>NSAccessibilityUsageDescription</key>
 	<string>WTidy 需要辅助功能权限来检测窗口拖拽，以及调整窗口的位置和大小实现分屏。</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2026 WTidy.</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
 </dict>
 </plist>
