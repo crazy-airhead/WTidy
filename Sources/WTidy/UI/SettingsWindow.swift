@@ -667,17 +667,19 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
 
     // MARK: - 小工具
 
-    /// 快捷键徽章：等宽字体 + 圆角浅底
-    private func keyBadge(_ text: String) -> NSTextField {
-        let field = NSTextField(labelWithString: text)
-        field.font = Design.Font.monoBadge
-        field.alignment = .center
-        field.wantsLayer = true
-        field.layer?.cornerRadius = Design.Radius.badge
-        field.layer?.backgroundColor = Design.Color.badgeFill.cgColor
-        field.layer?.masksToBounds = true
-        field.widthAnchor.constraint(equalToConstant: max(48, CGFloat(text.count) * 10 + 18)).isActive = true
-        return field
+    /// 录制快捷键的统一校验：与固定动作/其他布局冲突时弹窗并拒绝。
+    /// 返回 true 表示可采用该组合。
+    @discardableResult
+    static func validateShortcut(keyCode: UInt32, modifiers: Int, excluding layoutID: String) -> Bool {
+        guard let owner = HotkeyManager.shared.conflictOwner(keyCode: keyCode,
+                                                             modifiers: modifiers,
+                                                             excluding: layoutID) else { return true }
+        let alert = NSAlert()
+        alert.messageText = L("快捷键冲突")
+        alert.informativeText = LF("该组合已被「%@」占用，请换一个。", owner)
+        alert.addButton(withTitle: L("好"))
+        alert.runModal()
+        return false
     }
 }
 
@@ -731,10 +733,13 @@ final class ScreenPositionPreviewView: NSView {
     }
 }
 
-// MARK: - 全局快捷键录制按钮（原版「Click to record shortcut」）
+// MARK: - 全局快捷键录制按钮（macOS 快捷键设置惯例）
 
+/// 点击录制：录制态高亮（强调色描边）；Esc 取消；Delete/⌦ 清除（macOS 惯例）；
+/// 无修饰键的按键不静默吞掉，标题即时提示。
 final class HotkeyRecorderButton: NSButton {
     var onRecord: ((UInt32, Int) -> Void)?
+    var onClear: (() -> Void)?
     private var monitor: Any?
     private var previousTitle = ""
 
@@ -754,26 +759,42 @@ final class HotkeyRecorderButton: NSButton {
         startRecording()
     }
 
+    /// 窗口关闭/按钮离树时务必收掉 monitor，否则局部键盘监听泄漏
+    override func viewDidMoveToWindow() {
+        if window == nil { stopRecording() }
+    }
+
     private func startRecording() {
         guard monitor == nil else { return }
         previousTitle = title
-        title = L("请按下快捷键…（Esc 取消，需含修饰键）")
+        title = L("输入快捷键…")
+        bezelColor = .controlAccentColor   // 录制态视觉高亮
 
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self = self else { return event }
-            if event.keyCode == 53 {  // Esc 取消
+            switch event.keyCode {
+            case 53:   // Esc 取消
                 self.stopRecording()
                 return nil
+            case 51, 117:   // Delete / ⌦：清除已录快捷键
+                self.stopRecording()
+                self.onClear?()
+                return nil
+            default:
+                break
             }
             var carbon: Int = 0
             if event.modifierFlags.contains(.command) { carbon |= cmdKey }
             if event.modifierFlags.contains(.option) { carbon |= optionKey }
             if event.modifierFlags.contains(.control) { carbon |= controlKey }
             if event.modifierFlags.contains(.shift) { carbon |= shiftKey }
-            guard carbon != 0 else { return nil }  // 无修饰键的按键直接吞掉
+            guard carbon != 0 else {
+                self.title = L("需含修饰键（⌃⌥⌘⇧）")   // 提示而非静默吞掉
+                return nil
+            }
 
-            self.onRecord?(UInt32(event.keyCode), carbon)
             self.stopRecording()
+            self.onRecord?(UInt32(event.keyCode), carbon)
             return nil
         }
     }
@@ -781,6 +802,7 @@ final class HotkeyRecorderButton: NSButton {
     private func stopRecording() {
         monitor.map { NSEvent.removeMonitor($0) }
         monitor = nil
+        bezelColor = nil
         title = previousTitle
     }
 }
@@ -1025,14 +1047,26 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
         stack.addArrangedSubview(fieldRow([label(L("名称")), nameField]))
 
         // 激活快捷键（原版 Activation Shortcut：应用到前台窗口）
+        // 回显已录组合；录制走统一冲突校验；Delete 清除
+        if let kc = working.activationKeyCode, kc > 0, let mods = working.activationModifiers {
+            shortcutRecorder.title = SettingsWindowController.hotkeyDisplay(keyCode: UInt32(kc), modifiers: mods)
+        }
         shortcutRecorder.onRecord = { [weak self] keyCode, modifiers in
-            self?.working.activationKeyCode = Int(keyCode)
-            self?.working.activationModifiers = modifiers
-            self?.shortcutRecorder.title = SettingsWindowController.hotkeyDisplay(keyCode: keyCode, modifiers: modifiers)
+            guard let self else { return }
+            guard SettingsWindowController.validateShortcut(keyCode: keyCode, modifiers: modifiers,
+                                                            excluding: self.working.id) else { return }
+            self.working.activationKeyCode = Int(keyCode)
+            self.working.activationModifiers = modifiers
+            self.shortcutRecorder.title = SettingsWindowController.hotkeyDisplay(keyCode: keyCode, modifiers: modifiers)
+        }
+        shortcutRecorder.onClear = { [weak self] in
+            self?.working.activationKeyCode = nil
+            self?.working.activationModifiers = nil
+            self?.shortcutRecorder.title = L("未设置（点击录制）")
         }
         shortcutRecorder.widthAnchor.constraint(equalToConstant: 380).isActive = true
         stack.addArrangedSubview(fieldRow([label(L("激活快捷键")), shortcutRecorder]))
-        stack.addArrangedSubview(Design.Text.caption(L("点击录制；录制后按此快捷键把该布局应用到最前面的窗口。Shift+Esc 清除。—— 实际清除方式：点录制后按 Esc 取消。"), wrapWidth: 480))
+        stack.addArrangedSubview(Design.Text.caption(L("点击录制；Esc 取消，Delete 清除；需含修饰键（⌃⌥⌘⇧）。录制后按此快捷键把该布局应用到最前面的窗口。"), wrapWidth: 480))
 
         // 作用域
         scopePopUp.addItem(withTitle: L("所有屏幕"))
@@ -1286,12 +1320,33 @@ extension SettingsWindowController {
         scopeLabel.frame = NSRect(x: 178, y: 20, width: 300, height: 14)
         cell.addSubview(scopeLabel)
 
-        // 已录制的激活快捷键徽章
+        // 快捷键：点击即录（不必进编辑器）；录制中 Delete 清除；冲突弹窗拒绝
+        let recorder = HotkeyRecorderButton(title: L("录制"))
+        recorder.controlSize = .small
+        recorder.font = Design.Font.monoBadge
         if let kc = layout.activationKeyCode, kc > 0, let mods = layout.activationModifiers {
-            let shortcutBadge = keyBadge(SettingsWindowController.hotkeyDisplay(keyCode: UInt32(kc), modifiers: mods))
-            shortcutBadge.frame = NSRect(x: 480, y: 40, width: 140, height: 18)
-            cell.addSubview(shortcutBadge)
+            recorder.title = Self.hotkeyDisplay(keyCode: UInt32(kc), modifiers: mods)
         }
+        recorder.frame = NSRect(x: 478, y: 36, width: 140, height: 22)
+        let layoutID = layout.id
+        recorder.onRecord = { [weak self] keyCode, modifiers in
+            guard Self.validateShortcut(keyCode: keyCode, modifiers: modifiers, excluding: layoutID) else { return }
+            var list = LayoutStore.layouts
+            guard let idx = list.firstIndex(where: { $0.id == layoutID }) else { return }
+            list[idx].activationKeyCode = Int(keyCode)
+            list[idx].activationModifiers = modifiers
+            LayoutStore.layouts = list   // 广播 prefsChanged → HotkeyManager 自动重注册
+            self?.layoutTable.reloadData()
+        }
+        recorder.onClear = { [weak self] in
+            var list = LayoutStore.layouts
+            guard let idx = list.firstIndex(where: { $0.id == layoutID }) else { return }
+            list[idx].activationKeyCode = nil
+            list[idx].activationModifiers = nil
+            LayoutStore.layouts = list
+            self?.layoutTable.reloadData()
+        }
+        cell.addSubview(recorder)
 
         return cell
     }

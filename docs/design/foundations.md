@@ -57,7 +57,6 @@
 | 令牌 | 值 | 用途 |
 |---|---|---|
 | `cardFill` | quaternaryLabelColor @ 0.12 | 引导窗步骤卡底色 |
-| `badgeFill` | quaternaryLabelColor @ 0.25 | 快捷键徽章底色 |
 | `menuMiniFill` | controlAccentColor @ 0.8 | 菜单「应用布局」迷你预览块 |
 
 ### 1.5 图标条配色主题（`StripTheme`，用户可选）
@@ -94,7 +93,7 @@
 | 11 | regular | `hint` | 次要提示、作用域角标、引导步骤详情 |
 | 10 | regular | `caption` | 说明文字（灰色小字） |
 | 10 | mono | `monoSmall` | 日志路径 |
-| 11 | mono | `monoBadge` | 快捷键徽章 |
+| 11 | mono | `monoBadge` | 快捷键录制按钮 |
 | 12 | mono | `monoField` | 网格密度数字输入框 |
 | 9 | medium | `iconName` | 图标条上的布局名称标注 |
 
@@ -107,7 +106,6 @@
 | 2 | `menuMini` | 菜单迷你预览块 |
 | 4 | `cell` | 图标/画布内的区域块 |
 | 4 | `insetFrame` | 背景井、画布、预览的 CALayer 圆角 |
-| 5 | `badge` | 快捷键徽章 |
 | 6 | `nameBand` | 图标名称标注带 |
 | 8 | `icon` | 布局图标外框 |
 | 10 | `zone` | 整屏分区预览矩形 |

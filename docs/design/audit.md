@@ -258,3 +258,21 @@ grep -rn "xRadius\|cornerRadius" Sources/WTidy/UI Sources/WTidy/Overlay | grep -
 - `activeCellStroke`：(0.9 灰) → (0.92,0.93,0.96)（微蓝白，与白填充拉开层次）
 
 **验证**：调优后渲染图命中态对比清晰；`swift build` 通过、`swift test` 29/29 通过。
+
+---
+
+## 十四次核对：2026-11-13（快捷键录制交互重做）
+
+**触发**：用户指出布局快捷键的录制配置流程复杂。
+
+**核对发现的痛点**：① 入口深——只能双击进编辑器逐条录，列表徽章只读；② 录制态无视觉反馈，清除方式隐晦且说明文案自相矛盾（「Shift+Esc 清除。—— 实际清除方式：Esc 取消」）；③ 无冲突检测，撞车时 Carbon 注册静默失败（连日志都没有）；④ 编辑器不回显已录组合，显示「未设置」误导。
+
+**修复**：
+- `HotkeyRecorderButton` 重做：录制态强调色描边高亮 + 「输入快捷键…」；Delete/⌦ 清除（macOS 惯例，新增 `onClear`）；无修饰键按键即时标题提示不静默吞掉；按钮离树自动收 monitor 防泄漏。
+- `HotkeyManager.conflictOwner`：录制统一过冲突校验（固定动作 + 其他布局），冲突弹窗指名占用者并保留原组合；布局快捷键注册失败补 `AppLog.warn`。
+- 入口前移：布局列表行的只读徽章改为可点击录制按钮（点击即录、Delete 清除，保存经 LayoutStore 广播自动重注册），编辑器保留同一按钮；编辑器回显已录组合、修正说明文案。
+- 清理死令牌：`badgeFill`、`Radius.badge` 随徽章移除；`monoBadge` 转作录制按钮字体。foundations/components 同步。
+
+**防回归**：`layoutShortcutConflictDetected` / `fixedActionConflictDetected`。教训：swift-testing 各 Suite 默认并行——共享 `LayoutStore` 全局态的测试必须放进同一 `.serialized` 套件（独立套件会被 SnapEngineTests 每测试一次的 `init() reset` 竞态击穿，实测翻车一次）。
+
+**验证**：`swift test` 31/31 通过；键完整性两表 146/146 零缺口。

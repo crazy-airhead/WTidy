@@ -104,6 +104,23 @@ final class HotkeyManager {
 
     static let shared = HotkeyManager()
 
+    /// 冲突查询：该组合是否已被固定动作或其他布局占用（录制前校验）。
+    /// 返回占用者的显示名；无冲突返回 nil。
+    func conflictOwner(keyCode: UInt32, modifiers: Int, excluding layoutID: String?) -> String? {
+        for action in SnapAction.allCases where Prefs.hotkeyEnabled(action.rawValue) {
+            if action.defaultKeyCode == keyCode && action.defaultModifiers == modifiers {
+                return action.displayName
+            }
+        }
+        for layout in LayoutStore.layouts where layout.id != layoutID {
+            if let kc = layout.activationKeyCode, kc > 0, kc == Int(keyCode),
+               layout.activationModifiers == modifiers {
+                return layout.name
+            }
+        }
+        return nil
+    }
+
     /// 依据偏好整体重注册
     func refresh() {
         unregisterAll()
@@ -136,10 +153,14 @@ final class HotkeyManager {
                   let mods = layout.activationModifiers else { continue }
             let hkID = EventHotKeyID(signature: signature, id: seq)
             var ref: EventHotKeyRef?
-            if RegisterEventHotKey(UInt32(kc), UInt32(mods), hkID,
-                                   GetApplicationEventTarget(), 0, &ref) == noErr, let ref = ref {
+            let err = RegisterEventHotKey(UInt32(kc), UInt32(mods), hkID,
+                                          GetApplicationEventTarget(), 0, &ref)
+            if err == noErr, let ref = ref {
                 layoutHotKeyRefs.append(ref)
                 layoutShortcutMap[seq] = layout.id
+            } else {
+                // 注册失败多半是与本应用外占用的组合冲突——至少留痕，别静默
+                AppLog.warn("布局快捷键注册失败 \(layout.name) kc=\(kc) err=\(err)")
             }
             seq += 1
         }

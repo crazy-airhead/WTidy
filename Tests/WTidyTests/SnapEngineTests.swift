@@ -1,6 +1,7 @@
 import Testing
 import CoreGraphics
 import Foundation
+import Carbon.HIToolbox
 @testable import WTidy
 
 // CLT 工具链不带 XCTest，使用 Swift Testing（Testing.framework + 宏插件随 CLT 分发）
@@ -365,5 +366,37 @@ struct SnapEngineTests {
             #expect(close(rects[0].maxY, vf.height - 10 - 12, eps: 1))   // 贴顶（posY=0）减边距与底卡内边距
             #expect(rects[1].maxY < rects[0].minY + 0.001)          // 依次向下
         }
+    }
+
+    // MARK: - 快捷键冲突检测（HotkeyManager.conflictOwner）
+    // 注意：必须放在本串行套件内——独立套件会与 SnapEngineTests 并行，其 init() 的
+    // LayoutStore.reset() 会与本测试的写入交错（实测并行竞态导致断言失败）
+
+    @Test func layoutShortcutConflictDetected() {
+        var list = LayoutStore.layouts
+        list[0].activationKeyCode = 1    // S（注意：kc>0 是全代码库的「已设置」哨兵，键码 0 不可用）
+        list[0].activationModifiers = cmdKey | optionKey
+        LayoutStore.layouts = list
+
+        let name = LayoutStore.layouts[0].name
+        // 同一组合、不同布局 → 冲突，返回占用者名
+        #expect(HotkeyManager.shared.conflictOwner(keyCode: 1, modifiers: cmdKey | optionKey,
+                                                   excluding: "other-layout") == name)
+        // 排除自身 → 无冲突
+        #expect(HotkeyManager.shared.conflictOwner(keyCode: 1, modifiers: cmdKey | optionKey,
+                                                   excluding: list[0].id) == nil)
+        // 不同组合 → 无冲突
+        #expect(HotkeyManager.shared.conflictOwner(keyCode: 2, modifiers: cmdKey | optionKey,
+                                                   excluding: "other-layout") == nil)
+    }
+
+    @Test func fixedActionConflictDetected() {
+        // ⌥⌘← 是固定动作「左半屏」（keyCode 123）
+        let owner = HotkeyManager.shared.conflictOwner(keyCode: 123, modifiers: cmdKey | optionKey,
+                                                       excluding: nil)
+        #expect(owner == SnapAction.leftHalf.displayName)
+        // ⌃⌥⌘← 与固定动作不冲突（修饰键不同）
+        #expect(HotkeyManager.shared.conflictOwner(keyCode: 123, modifiers: cmdKey | optionKey | controlKey,
+                                                   excluding: nil) == nil)
     }
 }

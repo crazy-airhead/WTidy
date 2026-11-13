@@ -45,7 +45,6 @@ enum Design {
 
         // —— 衍生表面色（语义色 + alpha，随系统外观）——
         static let cardFill = NSColor.quaternaryLabelColor.withAlphaComponent(0.12)   // 引导步骤卡底色
-        static let badgeFill = NSColor.quaternaryLabelColor.withAlphaComponent(0.25)  // 快捷键徽章底色
         static let menuMiniFill = NSColor.controlAccentColor.withAlphaComponent(0.8)  // 菜单迷你预览块
     }
 
@@ -55,7 +54,6 @@ enum Design {
         static let menuMini: CGFloat = 2         // 菜单迷你预览块
         static let cell: CGFloat = 4             // 图标/画布内区域块
         static let insetFrame: CGFloat = 4       // 背景井/画布/预览的 CALayer 圆角
-        static let badge: CGFloat = 5            // 快捷键徽章
         static let nameBand: CGFloat = 6         // 图标名称标注带
         static let icon: CGFloat = 8             // 布局图标外框
         static let zone: CGFloat = 10            // 整屏分区预览矩形
@@ -81,7 +79,7 @@ enum Design {
         static let caption = NSFont.systemFont(ofSize: 10)                           // 说明文字
         static let iconName = NSFont.systemFont(ofSize: 9, weight: .medium)          // 图标条名称标注
         static let monoSmall = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular) // 日志路径
-        static let monoBadge = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular) // 快捷键徽章
+        static let monoBadge = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular) // 快捷键录制按钮
         static let monoField = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular) // 网格密度数字框
     }
 
