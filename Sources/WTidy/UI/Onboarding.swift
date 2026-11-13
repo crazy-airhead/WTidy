@@ -112,7 +112,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         doneButton.isEnabled = false
         doneButton.widthAnchor.constraint(equalToConstant: 300).isActive = true
 
-        let hint = NSTextField(labelWithString: L("拖拽任意窗口，屏幕顶部会出现布局条；悬停选择布局后松手即吸附。\n快捷键示例：⌥⌘← 左半屏，⌃⌥⌘F 最大化，⌃⌥⌘Z 恢复位置。"))
+        let hint = NSTextField(labelWithString: L("拖拽任意窗口，屏幕顶部会出现布局条；悬停选择布局后松手即吸附。\n内置快捷键示例：⌥⌘← 左半屏，⌥⌘F 最大化，⌃⌥⌘Z 恢复位置。"))
         hint.font = Design.Font.hint
         hint.textColor = .secondaryLabelColor
         hint.alignment = .center

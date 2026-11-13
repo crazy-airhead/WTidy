@@ -20,6 +20,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Prefs.stripMaxWidth = 1320
             AppLog.info("迁移最大宽度 \(legacyMaxWidth!) → 1320")
         }
+        // 内置区域快捷键补种：旧版持久化列表里内置布局没有快捷键，一次性补默认值
+        LayoutStore.seedBuiltinRegionHotkeysIfNeeded()
 
         status.configure(hooks: .init(
             openSettings: { [weak self] in self?.openSettings() },

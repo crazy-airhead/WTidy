@@ -241,7 +241,6 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
         }
         guard let screen = screenForWindow(win) else { return }
         let vf = screen.visibleFrame
-        let gap = Prefs.windowGap
 
         switch action {
         case .restore:
@@ -261,16 +260,6 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
             let rect = SnapEngine.centeredRect(size: size, in: vf)
             WindowAnimator.apply(win, to: rect) { [weak self] in
                 self?.onSnapApplied?(LF("居中（保持尺寸） · %@", screen.localizedName))
-            }
-
-        default:
-            guard let (layout, zone) = Self.layoutAndZone(for: action) else { return }
-            let zones = SnapEngine.zoneRects(for: layout, in: vf, gap: gap)
-            guard zones.indices.contains(zone), !zones[zone].isNull else { return }
-            rememberIfNeeded(win)
-            let desc = "\(zoneDisplayName(layout: layout, index: zone)) · \(screen.localizedName)"
-            WindowAnimator.apply(win, to: zones[zone]) { [weak self] in
-                self?.onSnapApplied?(desc)
             }
         }
     }
@@ -384,26 +373,10 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
         return true
     }
 
-    /// 快捷键动作 → (布局, 区域下标)；布局从用户列表按稳定 id 查找（被删除则动作失效）
-    static func layoutAndZone(for action: SnapAction) -> (TidyLayout, Int)? {
-        func l(_ id: String) -> TidyLayout? { LayoutStore.layout(id: id) }
-        switch action {
-        case .leftHalf: guard let x = l("halves") else { return nil }; return (x, 0)
-        case .rightHalf: guard let x = l("halves") else { return nil }; return (x, 1)
-        case .topHalf: guard let x = l("vertical") else { return nil }; return (x, 0)
-        case .bottomHalf: guard let x = l("vertical") else { return nil }; return (x, 1)
-        case .leftThird: guard let x = l("thirds") else { return nil }; return (x, 0)
-        case .middleThird: guard let x = l("thirds") else { return nil }; return (x, 1)
-        case .rightThird: guard let x = l("thirds") else { return nil }; return (x, 2)
-        case .twoThirdsLeft: guard let x = l("wideNarrow") else { return nil }; return (x, 0)
-        case .twoThirdsRight: guard let x = l("wideNarrow") else { return nil }; return (x, 1)
-        case .maximize: guard let x = l("full") else { return nil }; return (x, 0)
-        case .center, .restore: return nil
-        }
-    }
-
     func zoneDisplayName(layout: TidyLayout, index: Int) -> String {
-        switch (layout.id, index) {
+        // 内置区域名按内置表下标定义；用户列表里区域先后可能不同，先按几何位置换算
+        // （对不上内置表的——分区被改过——落到 default 用通用命名）
+        switch (layout.id, layout.builtinRegionIndex(index)) {
         case ("halves", 0): return L("左半屏")
         case ("halves", 1): return L("右半屏")
         case ("vertical", 0): return L("上半屏")
@@ -419,8 +392,8 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
         case ("quarters", 1): return L("右上 1/4")
         case ("quarters", 2): return L("左下 1/4")
         case ("quarters", 3): return L("右下 1/4")
-        case ("full", _): return L("最大化")
-        case ("center", _): return L("居中")
+        case ("full", 0): return L("最大化")
+        case ("center", 0): return L("居中")
         default:
             if layout.regions.count > 1 {
                 // 自动分组合并的布局（id 形如 a+b，名称形如 L("甲 / 乙")）：按区域取对应名称

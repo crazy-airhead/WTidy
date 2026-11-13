@@ -177,7 +177,29 @@ struct SettingsRenderTests {
             return
         }
 
+        tab.selectTabViewItem(at: 0)
+        win.contentView?.layoutSubtreeIfNeeded()
+        guard let pageStack = scroll.documentView as? NSStackView,
+              let listScroll = pageStack.arrangedSubviews.compactMap({ $0 as? NSScrollView }).first,
+              let table = listScroll.documentView as? NSTableView else {
+            Issue.record("布局页列表缺失")
+            return
+        }
+
+        // 内置布局已预置区域快捷键（2026-11-13）——本测试验「未录制」基线：
+        // 先清空 quarters 的默认快捷键（✕ 淡出禁点、录制钮占位标题才有意义）
+        let saved = LayoutStore.layouts
+        defer { LayoutStore.layouts = saved }
+        var list = LayoutStore.layouts
+        guard let q = list.firstIndex(where: { $0.id == "quarters" }) else {
+            Issue.record("quarters 缺失")
+            return
+        }
+        list[q].regionHotkeys = [:]
+        LayoutStore.layouts = list
+
         // 多区域布局（quarters，4 区域）：4 个录制钮 + 4 个清除钮（未录制 → 淡出禁点但占位）
+        table.reloadData()
         guard let rowView = quartersRowView(table) else { return }
         let recorders: [HotkeyRecorderButton] = collect(rowView)
         #expect(recorders.count == 4, "quarters 行应有 4 个区域录制钮，实际 \(recorders.count)")
@@ -226,8 +248,6 @@ struct SettingsRenderTests {
             Issue.record("quarters 缺失")
             return
         }
-        list[q].regionHotkeys[1] = .init(keyCode: 4, modifiers: cmdKey | optionKey)   // ⌥⌘H
-        LayoutStore.layouts = list
 
         tab.selectTabViewItem(at: 0)
         win.contentView?.layoutSubtreeIfNeeded()
@@ -237,6 +257,20 @@ struct SettingsRenderTests {
             Issue.record("布局页列表缺失")
             return
         }
+
+        // 内置默认态：预置的快捷键（quarters 区域 0 = ⌥⌘1）应直接回显在录制钮上
+        table.reloadData()
+        guard let defaultRow = quartersRowView(table) else { return }
+        let defaultRecorders: [HotkeyRecorderButton] = collect(defaultRow)
+        #expect(defaultRecorders.count == 4)
+        #expect(defaultRecorders[0].title == SettingsWindowController.hotkeyDisplay(keyCode: 18, modifiers: cmdKey | optionKey),
+                "内置默认快捷键应回显（quarters 区域 0 = ⌥⌘1），实际 \(defaultRecorders.map(\.title))")
+
+        // 构造「仅区域 1 已录制」基线：清掉内置默认再录 ⌥⌘H
+        list[q].regionHotkeys = [:]
+        list[q].regionHotkeys[1] = .init(keyCode: 4, modifiers: cmdKey | optionKey)   // ⌥⌘H
+        LayoutStore.layouts = list
+
         table.reloadData()
         guard let rowView = quartersRowView(table) else { return }
 

@@ -1,5 +1,6 @@
 import Foundation
 import CoreGraphics
+import Carbon.HIToolbox
 
 /// 用户可编辑的分屏布局——对齐原版 Window Tidy 的 Layouts 模型：
 /// 网格（默认 6×6）+ 一个或多个区域，区域用 1-based 单元坐标 (x1,y1)-(x2,y2)，y1 为顶行。
@@ -76,6 +77,17 @@ struct TidyLayout: Codable, Equatable {
         }
     }
 
+    /// 本布局第 index 个区域在内置表里的下标——按几何位置对应，不看先后
+    /// （用户列表里区域的先后可能与内置表不同：重画过、或由历史条目收编而来）。
+    /// 不是内置布局、网格被改过、或该区域不在内置表里时返回 nil。
+    /// 内置默认快捷键与内置区域名都按内置表下标定义，取用前必须经此换算。
+    func builtinRegionIndex(_ index: Int) -> Int? {
+        guard regions.indices.contains(index),
+              let builtin = TidyLayout.builtins.first(where: { $0.id == id }),
+              builtin.cols == cols, builtin.rows == rows else { return nil }
+        return builtin.regions.firstIndex(of: regions[index])
+    }
+
     static func == (lhs: TidyLayout, rhs: TidyLayout) -> Bool {
         lhs.id == rhs.id && lhs.name == rhs.name && lhs.cols == rhs.cols
             && lhs.rows == rhs.rows && lhs.regions == rhs.regions
@@ -109,17 +121,47 @@ struct TidyLayout: Codable, Equatable {
                    scope: a.scope)
     }
 
+    /// ⌥⌘（全部内置区域快捷键的默认修饰键——用户定案：尽可能短，
+    /// 三修饰键按起来不如拖拽，2026-11-13）
+    private static let cmdOpt = cmdKey | optionKey
+
     /// 内置布局（顺序即图标条顺序；id 稳定，快捷键依赖它）。
     /// 共 8 个：一个布局 = 一套完整分区方案（窄宽/宽窄是各自含两个区域的双区布局）。
+    /// 每个区域随布局预置默认快捷键（2026-11-13 起，「固定方向快捷键」收编进来），
+    /// 一律 ⌥⌘ 两修饰键（用户要求：宁短勿长，太长不如拖拽）：
+    /// - ← → ↑ ↓ 四个半屏方向
+    /// - [ \ ] 三等分（左中右）；, . 窄宽（左1/3、右2/3）；; ' 宽窄（左2/3、右1/3）——
+    ///   右手键位从左到右自然排列（[ < \ < ]，, < . < ; < '）
+    /// - 1/2/3/4 四分（按阅读顺序：左上/右上/左下/右下；不用 U/I/J/K——⌥⌘I/J/U 是浏览器
+    ///   开发者工具的检查器/控制台/查看源码）；F 最大化；M 居中区域
+    /// - 17 个组合互不重复，全 ⌥⌘ 家族与固定动作 ⌃⌥⌘C（居中保持尺寸）/ ⌃⌥⌘Z（恢复）零交叠
+    /// keyCode 用 Carbon 键码；用户可整行改录或清除，清除后不回种（见 LayoutStore 补种）。
     static let builtins: [TidyLayout] = [
-        .init(id: "halves",       name: L("左右半屏"),        cols: 2, rows: 1, regions: [.init(1, 1, 1, 1), .init(2, 1, 2, 1)]),
-        .init(id: "vertical",     name: L("上下半屏"),        cols: 1, rows: 2, regions: [.init(1, 1, 1, 1), .init(1, 2, 1, 2)]),
-        .init(id: "thirds",       name: L("三等分"),          cols: 3, rows: 1, regions: [.init(1, 1, 1, 1), .init(2, 1, 2, 1), .init(3, 1, 3, 1)]),
-        .init(id: "narrowWide",   name: L("左 1/3 + 右 2/3"), cols: 3, rows: 1, regions: [.init(1, 1, 1, 1), .init(2, 1, 3, 1)]),
-        .init(id: "wideNarrow",   name: L("左 2/3 + 右 1/3"), cols: 3, rows: 1, regions: [.init(1, 1, 2, 1), .init(3, 1, 3, 1)]),
-        .init(id: "quarters",     name: L("四分"),            cols: 2, rows: 2, regions: [.init(1, 1, 1, 1), .init(2, 1, 2, 1), .init(1, 2, 1, 2), .init(2, 2, 2, 2)]),
-        .init(id: "full",         name: L("最大化"),          cols: 1, rows: 1, regions: [.init(1, 1, 1, 1)]),
-        .init(id: "center",       name: L("居中"),            cols: 6, rows: 6, regions: [.init(2, 2, 5, 5)]),  // 原版 Centre：(2,2)-(5,5)
+        .init(id: "halves",       name: L("左右半屏"),        cols: 2, rows: 1, regions: [.init(1, 1, 1, 1), .init(2, 1, 2, 1)],
+              regionHotkeys: [0: .init(keyCode: 123, modifiers: cmdOpt),   // ⌥⌘←
+                              1: .init(keyCode: 124, modifiers: cmdOpt)]), // ⌥⌘→
+        .init(id: "vertical",     name: L("上下半屏"),        cols: 1, rows: 2, regions: [.init(1, 1, 1, 1), .init(1, 2, 1, 2)],
+              regionHotkeys: [0: .init(keyCode: 126, modifiers: cmdOpt),   // ⌥⌘↑
+                              1: .init(keyCode: 125, modifiers: cmdOpt)]), // ⌥⌘↓
+        .init(id: "thirds",       name: L("三等分"),          cols: 3, rows: 1, regions: [.init(1, 1, 1, 1), .init(2, 1, 2, 1), .init(3, 1, 3, 1)],
+              regionHotkeys: [0: .init(keyCode: 33, modifiers: cmdOpt),    // ⌥⌘[
+                              1: .init(keyCode: 42, modifiers: cmdOpt),    // ⌥⌘\
+                              2: .init(keyCode: 30, modifiers: cmdOpt)]),  // ⌥⌘]
+        .init(id: "narrowWide",   name: L("左 1/3 + 右 2/3"), cols: 3, rows: 1, regions: [.init(1, 1, 1, 1), .init(2, 1, 3, 1)],
+              regionHotkeys: [0: .init(keyCode: 43, modifiers: cmdOpt),    // ⌥⌘,
+                              1: .init(keyCode: 47, modifiers: cmdOpt)]),  // ⌥⌘.
+        .init(id: "wideNarrow",   name: L("左 2/3 + 右 1/3"), cols: 3, rows: 1, regions: [.init(1, 1, 2, 1), .init(3, 1, 3, 1)],
+              regionHotkeys: [0: .init(keyCode: 41, modifiers: cmdOpt),    // ⌥⌘;
+                              1: .init(keyCode: 39, modifiers: cmdOpt)]),  // ⌥⌘'
+        .init(id: "quarters",     name: L("四分"),            cols: 2, rows: 2, regions: [.init(1, 1, 1, 1), .init(2, 1, 2, 1), .init(1, 2, 1, 2), .init(2, 2, 2, 2)],
+              regionHotkeys: [0: .init(keyCode: 18, modifiers: cmdOpt),    // ⌥⌘1 左上
+                              1: .init(keyCode: 19, modifiers: cmdOpt),    // ⌥⌘2 右上
+                              2: .init(keyCode: 20, modifiers: cmdOpt),    // ⌥⌘3 左下
+                              3: .init(keyCode: 21, modifiers: cmdOpt)]),  // ⌥⌘4 右下
+        .init(id: "full",         name: L("最大化"),          cols: 1, rows: 1, regions: [.init(1, 1, 1, 1)],
+              regionHotkeys: [0: .init(keyCode: 3, modifiers: cmdOpt)]),   // ⌥⌘F
+        .init(id: "center",       name: L("居中"),            cols: 6, rows: 6, regions: [.init(2, 2, 5, 5)],   // 原版 Centre：(2,2)-(5,5)
+              regionHotkeys: [0: .init(keyCode: 46, modifiers: cmdOpt)]),  // ⌥⌘M（区别于固定 ⌃⌥⌘C 保持尺寸居中）
     ]
 }
 
@@ -183,9 +225,52 @@ enum LayoutStore {
         set {
             if let data = try? JSONEncoder().encode(newValue) {
                 UserDefaults.standard.set(data, forKey: key)
+                // 写回的 JSON 一定带 regionHotkeys 字段：此后空表 = 用户主动清空，不再补种
+                UserDefaults.standard.set(true, forKey: seededKey)
                 NotificationCenter.default.post(name: .prefsChanged, object: nil)
             }
         }
+    }
+
+    /// v2：首版补种按下标逐个比较区域，漏掉了区域先后与内置表不同的布局
+    /// （2026-11-13 用户截图：「左 1/3 + 右 2/3」两个区域仍是「录制」）；换键让跑过首版的重补一次
+    private static let seededKey = "regionHotkeysSeeded.v2"
+
+    /// 内置区域快捷键一次性补种（启动时调用）：内置快捷键功能之前写入的列表里，
+    /// 内置布局的区域没有快捷键 → 补上内置默认值。
+    /// 只在「从未补种 且 已有持久化列表」时动手；全新安装直接读到带默认值的 builtins。
+    /// 补种前不存在「默认值」，所以空区域一定是「从没设过」而非「用户清掉了」，按区域补是安全的：
+    /// - 按几何位置对应内置区域（builtinRegionIndex），不看区域先后；
+    ///   被用户改掉的区域对不上内置表，自然不补
+    /// - 用户已录的区域不动；默认组合被用户录到别处的跳过（用户录的优先）
+    static func seedBuiltinRegionHotkeysIfNeeded() {
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: seededKey) == nil else { return }
+        defaults.set(true, forKey: seededKey)
+        guard let data = defaults.data(forKey: key),
+              let stored = try? JSONDecoder().decode([TidyLayout].self, from: data), !stored.isEmpty else { return }
+
+        var list = canonicalized(stored)   // 先收编历史 id，否则陈旧条目认不出是内置布局
+        var taken = Set(list.flatMap { $0.regionHotkeys.values }.filter { $0.keyCode > 0 }.map(comboKey))
+        var seeded = 0
+        for i in list.indices {
+            guard let builtin = TidyLayout.builtins.first(where: { $0.id == list[i].id }) else { continue }
+            for region in list[i].regions.indices where (list[i].regionHotkeys[region]?.keyCode ?? 0) <= 0 {
+                guard let builtinRegion = list[i].builtinRegionIndex(region),
+                      let hk = builtin.regionHotkeys[builtinRegion], !taken.contains(comboKey(hk)) else { continue }
+                list[i].regionHotkeys[region] = hk
+                taken.insert(comboKey(hk))
+                seeded += 1
+            }
+        }
+        guard seeded > 0, let out = try? JSONEncoder().encode(list) else { return }
+        defaults.set(out, forKey: key)
+        NotificationCenter.default.post(name: .prefsChanged, object: nil)
+        AppLog.info("旧版布局列表补种内置区域快捷键 \(seeded) 个")
+    }
+
+    private static func comboKey(_ hk: TidyLayout.RegionHotkey) -> String {
+        "\(hk.keyCode):\(hk.modifiers)"
     }
 
     static func reset() { layouts = TidyLayout.builtins }

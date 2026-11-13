@@ -2,35 +2,18 @@ import Foundation
 import AppKit
 import Carbon.HIToolbox
 
-// MARK: - 快捷键动作定义
+// MARK: - 固定快捷键动作
 
+/// 只剩两个不属于任何布局区域的动作。方向/三分/最大化类原本也在这里（硬编码、设置里
+/// 看不见也改不了），2026-11-13 收编为内置布局的默认区域快捷键（TidyLayout.builtins），
+/// 在布局列表行内可见、可改录、可清除。
 enum SnapAction: String, CaseIterable {
-    case leftHalf
-    case rightHalf
-    case topHalf
-    case bottomHalf
-    case leftThird
-    case middleThird
-    case rightThird
-    case twoThirdsLeft
-    case twoThirdsRight
-    case maximize
     case center
     case restore
 
     var displayName: String {
         switch self {
-        case .leftHalf: return L("左半屏")
-        case .rightHalf: return L("右半屏")
-        case .topHalf: return L("上半屏")
-        case .bottomHalf: return L("下半屏")
-        case .leftThird: return L("左 1/3")
-        case .middleThird: return L("中 1/3")
-        case .rightThird: return L("右 1/3")
-        case .twoThirdsLeft: return L("左 2/3")
-        case .twoThirdsRight: return L("右 2/3")
-        case .maximize: return L("最大化")
-        case .center: return L("居中")
+        case .center: return L("居中（保持尺寸）")
         case .restore: return L("恢复位置")
         }
     }
@@ -38,52 +21,13 @@ enum SnapAction: String, CaseIterable {
     /// Carbon 键码与修饰键
     var defaultKeyCode: UInt32 {
         switch self {
-        case .leftHalf: return 123   // ←
-        case .rightHalf: return 124  // →
-        case .topHalf: return 126    // ↑
-        case .bottomHalf: return 125 // ↓
-        case .leftThird: return 33   // [
-        case .middleThird: return 42 // \
-        case .rightThird: return 30  // ]
-        case .twoThirdsLeft: return 33
-        case .twoThirdsRight: return 30
-        case .maximize: return 3     // F
         case .center: return 8       // C
         case .restore: return 6      // Z
         }
     }
 
     var defaultModifiers: Int {
-        switch self {
-        case .leftHalf, .rightHalf, .leftThird, .middleThird, .rightThird:
-            return cmdKey | optionKey                      // ⌥⌘
-        case .topHalf, .bottomHalf, .twoThirdsLeft, .twoThirdsRight,
-             .maximize, .center, .restore:
-            return cmdKey | optionKey | controlKey         // ⌃⌥⌘
-        }
-    }
-
-    /// 设置界面里的可读形式
-    var keyDescription: String {
-        let base: String
-        switch self {
-        case .leftHalf: base = L("←")
-        case .rightHalf: base = L("→")
-        case .topHalf: base = L("↑")
-        case .bottomHalf: base = L("↓")
-        case .leftThird: base = "["
-        case .middleThird: base = "\\"
-        case .rightThird: base = "]"
-        case .twoThirdsLeft: base = "["
-        case .twoThirdsRight: base = "]"
-        case .maximize: base = "F"
-        case .center: base = "C"
-        case .restore: base = "Z"
-        }
-        let ctrl = defaultModifiers & controlKey != 0 ? L("⌃") : ""
-        let opt = defaultModifiers & optionKey != 0 ? L("⌥") : ""
-        let cmd = defaultModifiers & cmdKey != 0 ? L("⌘") : ""
-        return ctrl + opt + cmd + base
+        cmdKey | optionKey | controlKey         // ⌃⌥⌘
     }
 }
 

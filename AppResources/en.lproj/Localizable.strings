@@ -150,6 +150,7 @@
 "%d × %d 网格，从 (%d, %d) 到 (%d, %d)" = "%d × %d grid, from (%d, %d) to (%d, %d)";
 "%d × %d 网格，%d 个区域" = "%d × %d grid, %d regions";
 "%d × %d 网格" = "%d × %d grid";
-"拖拽任意窗口，屏幕顶部会出现布局条；悬停选择布局后松手即吸附。\n快捷键示例：⌥⌘← 左半屏，⌃⌥⌘F 最大化，⌃⌥⌘Z 恢复位置。" = "Drag any window — a layout bar appears at the top of the screen;\nhover to pick a layout and release to snap.\nHotkey examples: ⌥⌘← left half, ⌃⌥⌘F maximize, ⌃⌥⌘Z restore position.";
+"拖拽任意窗口，屏幕顶部会出现布局条；悬停选择布局后松手即吸附。\n内置快捷键示例：⌥⌘← 左半屏，⌥⌘F 最大化，⌃⌥⌘Z 恢复位置。" = "Drag any window — a layout bar appears at the top of the screen;\nhover to pick a layout and release to snap.\nBuilt-in hotkey examples: ⌥⌘← left half, ⌥⌘F maximize, ⌃⌥⌘Z restore position.";
 "arm64 原生 · 看门狗自愈 · 现代登录项" = "arm64 native · self-healing watchdog · modern login item";
-"拖动可更改布局顺序，双击编辑。点击「录制」为区域设快捷键（Esc 取消；点 ✕ 或按 ⌫ 清除），按下直接把前台窗口吸到该区域。固定方向快捷键（⌥⌘←/→ 等）始终可用。" = "Drag to reorder, double-click to edit. Click Record to set a shortcut for a region (Esc cancels; ✕ or ⌫ clears it) — pressing the shortcut snaps the frontmost window straight to that region. Fixed directional shortcuts (⌥⌘←/→ etc.) are always available.";
+"拖动可更改布局顺序，双击编辑。内置布局已预置区域快捷键（如 ⌥⌘← 左半屏），按下直接把前台窗口吸到该区域；点击快捷键可改录（Esc 取消；点 ✕ 或按 ⌫ 清除）。另有 ⌃⌥⌘C 原尺寸居中、⌃⌥⌘Z 恢复位置。" = "Drag to reorder, double-click to edit. Built-in layouts come with region shortcuts preset (e.g. ⌥⌘← for the left half) — pressing one snaps the frontmost window straight to that region. Click a shortcut to re-record it (Esc cancels; ✕ or ⌫ clears it). Also available: ⌃⌥⌘C to centre at current size, ⌃⌥⌘Z to restore position.";
+"居中（保持尺寸）" = "Center (keep size)";

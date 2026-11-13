@@ -121,7 +121,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         stack.spacing = Design.Spacing.groupGap
 
         let caption = columnCapped(Design.Text.caption(
-            L("拖动可更改布局顺序，双击编辑。点击「录制」为区域设快捷键（Esc 取消；点 ✕ 或按 ⌫ 清除），按下直接把前台窗口吸到该区域。固定方向快捷键（⌥⌘←/→ 等）始终可用。"),
+            L("拖动可更改布局顺序，双击编辑。内置布局已预置区域快捷键（如 ⌥⌘← 左半屏），按下直接把前台窗口吸到该区域；点击快捷键可改录（Esc 取消；点 ✕ 或按 ⌫ 清除）。另有 ⌃⌥⌘C 原尺寸居中、⌃⌥⌘Z 恢复位置。"),
             wrapWidth: Self.columnWidth))
         stack.addArrangedSubview(caption)
         stack.setCustomSpacing(10, after: caption)
@@ -659,6 +659,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         case 17: base = "T"; case 31: base = "O"; case 32: base = "U"; case 34: base = "I"
         case 35: base = "P"; case 37: base = "L"; case 38: base = "J"; case 40: base = "K"
         case 45: base = "N"; case 46: base = "M"
+        case 33: base = "["; case 30: base = "]"; case 42: base = "\\"
+        case 43: base = ","; case 47: base = "."; case 44: base = "/"
+        case 41: base = ";"; case 39: base = "'"
+        case 27: base = "-"; case 24: base = "="; case 50: base = "`"
         case 18: base = "1"; case 19: base = "2"; case 20: base = "3"; case 21: base = "4"
         case 23: base = "5"; case 22: base = "6"; case 26: base = "7"; case 28: base = "8"
         case 25: base = "9"; case 29: base = "0"

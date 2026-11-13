@@ -213,17 +213,99 @@ struct SnapEngineTests {
         #expect(list[1].name == "我的布局")
     }
 
-    // MARK: - 快捷键映射
+    // MARK: - 内置区域快捷键
 
-    @Test func layoutAndZoneMapping() {
-        #expect(OverlayController.layoutAndZone(for: .leftHalf)?.1 == 0)
-        #expect(OverlayController.layoutAndZone(for: .rightHalf)?.0.id == "halves")
-        #expect(OverlayController.layoutAndZone(for: .twoThirdsLeft)?.0.id == "wideNarrow")
-        #expect(OverlayController.layoutAndZone(for: .twoThirdsLeft)?.1 == 0)
-        #expect(OverlayController.layoutAndZone(for: .twoThirdsRight)?.0.id == "wideNarrow")
-        #expect(OverlayController.layoutAndZone(for: .twoThirdsRight)?.1 == 1)
-        #expect(OverlayController.layoutAndZone(for: .center) == nil)
-        #expect(OverlayController.layoutAndZone(for: .restore) == nil)
+    @Test func builtinRegionHotkeyDefaults() {
+        // 每个内置布局的每个区域都要预置默认快捷键；组合互不重复、下标不越界；
+        // 一律 ⌥⌘ 两修饰键（用户定案 2026-11-13：宁短勿长，太长不如拖拽）；
+        // 且不与固定动作 ⌃⌥⌘C（保持尺寸居中）/ ⌃⌥⌘Z（恢复）交叠
+        var seen = Set<String>()
+        for layout in TidyLayout.builtins {
+            #expect(layout.regionHotkeys.count == layout.regions.count,
+                    "\(layout.id) 应每个区域都预置快捷键")
+            for (region, hk) in layout.regionHotkeys {
+                #expect(layout.regions.indices.contains(region), "\(layout.id) 快捷键下标 \(region) 越界")
+                #expect(hk.keyCode > 0)
+                #expect(hk.modifiers == cmdKey | optionKey, "\(layout.id) 区域\(region) 默认修饰键应为 ⌥⌘")
+                let key = "\(hk.keyCode):\(hk.modifiers)"
+                #expect(!seen.contains(key), "\(layout.id) 区域\(region) 组合重复：\(key)")
+                seen.insert(key)
+            }
+        }
+        #expect(seen.count == 17)
+        for action in SnapAction.allCases {
+            #expect(!seen.contains("\(action.defaultKeyCode):\(action.defaultModifiers)"),
+                    "内置默认与固定动作 \(action.rawValue) 撞组合")
+        }
+    }
+
+    @Test func builtinDefaultConflictOwner() {
+        // ⌥⌘← 是内置默认「左右半屏 · 区域 1」——录到别处必须报冲突
+        let owner = HotkeyManager.shared.conflictOwner(keyCode: 123, modifiers: cmdKey | optionKey,
+                                                       excluding: "any", region: 0)
+        #expect(owner == LayoutStore.layout(id: "halves")!.name + " · " + LF("区域 %d", 1))
+        // 固定动作只剩两个：⌃⌥⌘C / ⌃⌥⌘Z
+        #expect(HotkeyManager.shared.conflictOwner(keyCode: 8, modifiers: cmdKey | optionKey | controlKey,
+                                                   excluding: "any", region: 0) == SnapAction.center.displayName)
+        #expect(HotkeyManager.shared.conflictOwner(keyCode: 6, modifiers: cmdKey | optionKey | controlKey,
+                                                   excluding: "any", region: 0) == SnapAction.restore.displayName)
+        // 未占用的组合不报（Y 不在任何默认表里）
+        #expect(HotkeyManager.shared.conflictOwner(keyCode: 16, modifiers: cmdKey | optionKey,
+                                                   excluding: "any", region: 0) == nil)
+    }
+
+    @Test func seedBuiltinRegionHotkeysForLegacyList() {
+        // 旧版持久化列表（regionHotkeys 字段出现前写入）：内置布局空表 → 启动时一次性补默认
+        let savedMarker = UserDefaults.standard.object(forKey: "regionHotkeysSeeded.v2")
+        defer {
+            if let m = savedMarker { UserDefaults.standard.set(m, forKey: "regionHotkeysSeeded.v2") }
+            else { UserDefaults.standard.removeObject(forKey: "regionHotkeysSeeded.v2") }
+        }
+        // 五种存量形态：
+        // halves —— 从没录过 → 两个区域都补
+        // thirds —— 用户只录了区域 0（⌥⌘→，恰是 halves 右半的默认组合）→ 自己录的不动，补其余区域
+        // vertical —— 用户把分区改成了三行 → 结构已变，不补
+        // narrowWide —— 区域先后与内置表相反（右 2/3 在前）→ 按几何位置补，不看下标
+        //   （2026-11-13 用户截图：首版按下标比较，这种布局整个被跳过，仍显示「录制」）
+        // custom-x —— 自定义布局 → 不补
+        let legacy = """
+        [{"id":"halves","name":"左右半屏","cols":2,"rows":1,"regions":[{"x1":1,"y1":1,"x2":1,"y2":1},{"x1":2,"y1":1,"x2":2,"y2":1}]},
+         {"id":"thirds","name":"三等分","cols":3,"rows":1,"regions":[{"x1":1,"y1":1,"x2":1,"y2":1},{"x1":2,"y1":1,"x2":2,"y2":1},{"x1":3,"y1":1,"x2":3,"y2":1}],"regionHotkeys":{"0":{"keyCode":124,"modifiers":\(cmdKey | optionKey)}}},
+         {"id":"vertical","name":"上下半屏","cols":1,"rows":3,"regions":[{"x1":1,"y1":1,"x2":1,"y2":1},{"x1":1,"y1":2,"x2":1,"y2":3}]},
+         {"id":"narrowWide","name":"左 1/3 + 右 2/3","cols":3,"rows":1,"regions":[{"x1":2,"y1":1,"x2":3,"y2":1},{"x1":1,"y1":1,"x2":1,"y2":1}]},
+         {"id":"custom-x","name":"我的","cols":6,"rows":6,"regions":[{"x1":2,"y1":2,"x2":5,"y2":5}]}]
+        """
+        UserDefaults.standard.set(Data(legacy.utf8), forKey: "layoutList")
+        UserDefaults.standard.removeObject(forKey: "regionHotkeysSeeded.v2")
+
+        LayoutStore.seedBuiltinRegionHotkeysIfNeeded()
+
+        let list = LayoutStore.layouts
+        let builtin = { (id: String) in TidyLayout.builtins.first { $0.id == id }! }
+        #expect(list.map(\.id) == ["halves", "thirds", "vertical", "narrowWide", "custom-x"])
+        // halves：左半补 ⌥⌘←；右半的默认 ⌥⌘→ 已被用户录给 thirds 区域 0 → 跳过，不制造冲突
+        #expect(list[0].regionHotkeys[0] == builtin("halves").regionHotkeys[0])
+        #expect(list[0].regionHotkeys[1] == nil)
+        // thirds：用户录的区域 0 原样保留，区域 1/2 补默认
+        #expect(list[1].regionHotkeys[0] == .init(keyCode: 124, modifiers: cmdKey | optionKey))
+        #expect(list[1].regionHotkeys[1] == builtin("thirds").regionHotkeys[1])
+        #expect(list[1].regionHotkeys[2] == builtin("thirds").regionHotkeys[2])
+        #expect(list[2].regionHotkeys.isEmpty)   // 网格改过的内置布局不补
+        // narrowWide：本列表区域 0 是右 2/3 → 拿内置表区域 1 的 ⌥⌘.；区域 1 是左 1/3 → ⌥⌘,
+        #expect(list[3].regionHotkeys[0] == builtin("narrowWide").regionHotkeys[1])
+        #expect(list[3].regionHotkeys[1] == builtin("narrowWide").regionHotkeys[0])
+        #expect(list[3].builtinRegionIndex(0) == 1)
+        #expect(list[3].builtinRegionIndex(1) == 0)
+        #expect(list[2].builtinRegionIndex(1) == nil)   // 网格已改：对不上内置表
+        #expect(list[4].regionHotkeys.isEmpty)   // 自定义布局不补
+        #expect(list[4].builtinRegionIndex(0) == nil)
+
+        // 幂等：之后用户清空（setter 置补种标记）→ 再跑不回种
+        var cleared = list
+        cleared[0].regionHotkeys = [:]
+        LayoutStore.layouts = cleared
+        LayoutStore.seedBuiltinRegionHotkeysIfNeeded()
+        #expect(LayoutStore.layouts[0].regionHotkeys.isEmpty)
     }
 
     // MARK: - 自动分组（原版 AutoGroupLayouts）
@@ -404,15 +486,5 @@ struct SnapEngineTests {
         let reread = LayoutStore.layouts
         #expect(reread[1].regionHotkeys[2] == .init(keyCode: 20, modifiers: cmdKey | controlKey))
         // 旧 JSON（无 regionHotkeys 字段）解码回退为空表——由 init(from:) 的 decodeIfPresent 保证
-    }
-
-    @Test func fixedActionConflictDetected() {
-        // ⌥⌘← 是固定动作「左半屏」（keyCode 123）
-        let owner = HotkeyManager.shared.conflictOwner(keyCode: 123, modifiers: cmdKey | optionKey,
-                                                       excluding: "any", region: 0)
-        #expect(owner == SnapAction.leftHalf.displayName)
-        // ⌃⌥⌘← 与固定动作不冲突（修饰键不同）
-        #expect(HotkeyManager.shared.conflictOwner(keyCode: 123, modifiers: cmdKey | optionKey | controlKey,
-                                                   excluding: "any", region: 0) == nil)
     }
 }
