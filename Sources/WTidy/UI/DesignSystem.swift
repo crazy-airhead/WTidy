@@ -160,8 +160,8 @@ enum StripTheme {
         switch self {
         case .ink:     return [NSColor(red: 0.13, green: 0.17, blue: 0.26, alpha: 1),
                                NSColor(red: 0.09, green: 0.12, blue: 0.19, alpha: 1)]
-        case .graphite: return [NSColor(red: 0.18, green: 0.18, blue: 0.19, alpha: 1),
-                                NSColor(red: 0.11, green: 0.11, blue: 0.12, alpha: 1)]
+        case .graphite: return [NSColor(red: 0.15, green: 0.15, blue: 0.16, alpha: 1),
+                                NSColor(red: 0.08, green: 0.08, blue: 0.095, alpha: 1)]
         case .teal:    return [NSColor(red: 0.05, green: 0.17, blue: 0.19, alpha: 1),
                                NSColor(red: 0.03, green: 0.11, blue: 0.13, alpha: 1)]
         case .violet:  return [NSColor(red: 0.16, green: 0.10, blue: 0.25, alpha: 1),
@@ -172,7 +172,7 @@ enum StripTheme {
     var cellFill: NSColor {
         switch self {
         case .ink:     return NSColor(red: 0.44, green: 0.65, blue: 0.94, alpha: 0.92)
-        case .graphite: return NSColor(red: 0.82, green: 0.82, blue: 0.84, alpha: 0.88)
+        case .graphite: return NSColor(red: 0.66, green: 0.66, blue: 0.70, alpha: 0.55)
         case .teal:    return NSColor(red: 0.25, green: 0.78, blue: 0.74, alpha: 0.92)
         case .violet:  return NSColor(red: 0.71, green: 0.55, blue: 0.95, alpha: 0.92)
         }
@@ -196,7 +196,7 @@ enum StripTheme {
     var activeCellStroke: NSColor {
         switch self {
         case .ink:     return NSColor(red: 0.30, green: 0.55, blue: 0.95, alpha: 1)
-        case .graphite: return NSColor(red: 0.9, green: 0.9, blue: 0.9, alpha: 1)
+        case .graphite: return NSColor(red: 0.92, green: 0.93, blue: 0.96, alpha: 1)
         case .teal:    return NSColor(red: 0.10, green: 0.65, blue: 0.60, alpha: 1)
         case .violet:  return NSColor(red: 0.55, green: 0.35, blue: 0.90, alpha: 1)
         }
