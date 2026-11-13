@@ -21,7 +21,6 @@ enum Prefs {
         static let showLayoutNames = "showLayoutNames"
         static let warnOnFail = "warnOnFail"
         static let stripBackground = "stripBackground" // 0=默认背景 1=桌面壁纸
-        static let autoGroupLayouts = "autoGroupLayouts" // 原版 AutoGroupLayouts
         static let stripTheme = "stripTheme.v2"        // 图标条配色主题（v2：移除原版蓝后重置）
     }
 
@@ -128,12 +127,6 @@ enum Prefs {
     static var stripBackground: Int {
         get { defaults.integer(forKey: Keys.stripBackground) }
         set { set(newValue, forKey: Keys.stripBackground) }
-    }
-
-    /// 自动分组相邻互补布局（原版 AutoGroupLayouts）
-    static var autoGroupLayouts: Bool {
-        get { defaults.object(forKey: Keys.autoGroupLayouts) == nil ? true : defaults.bool(forKey: Keys.autoGroupLayouts) }
-        set { set(newValue, forKey: Keys.autoGroupLayouts) }
     }
 
     /// 图标条配色主题：0=墨蓝（默认） 1=石墨 2=青碧 3=紫罗兰

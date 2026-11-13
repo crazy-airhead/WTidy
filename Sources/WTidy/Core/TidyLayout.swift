@@ -93,34 +93,6 @@ struct TidyLayout: Codable, Equatable {
             && lhs.rows == rhs.rows && lhs.regions == rhs.regions
     }
 
-    /// 自动分组（对齐原版 AutoGroupLayouts）：两个同网格布局的区域互不重叠
-    /// 且互补合并后不超过网格 → 可合并为一个图标（图标内投影选区）。
-    static func groupable(_ a: TidyLayout, _ b: TidyLayout) -> Bool {
-        guard a.cols == b.cols, a.rows == b.rows, a.scope == b.scope else { return false }
-        let all = a.regions + b.regions
-        var occupied = Set<String>()
-        for r in all {
-            for x in r.x1...r.x2 {
-                for y in r.y1...r.y2 {
-                    let key = "\(x),\(y)"
-                    if occupied.contains(key) { return false }  // 重叠不可分组
-                    occupied.insert(key)
-                }
-            }
-        }
-        return true
-    }
-
-    /// 合并为一个布局（供自动分组），id 取二者拼接以保持可追溯
-    static func merged(_ a: TidyLayout, _ b: TidyLayout) -> TidyLayout {
-        TidyLayout(id: a.id + "+" + b.id,
-                   name: a.name + " / " + b.name,
-                   cols: a.cols,
-                   rows: a.rows,
-                   regions: a.regions + b.regions,
-                   scope: a.scope)
-    }
-
     /// ⌥⌘（全部内置区域快捷键的默认修饰键——用户定案：尽可能短，
     /// 三修饰键按起来不如拖拽，2026-11-13）
     private static let cmdOpt = cmdKey | optionKey
@@ -279,28 +251,11 @@ enum LayoutStore {
         layouts.first { $0.id == id }
     }
 
-    /// 图标条/快速布局面板实际展示的布局列表：
-    /// 1) 按作用域过滤（-1 所有屏幕 或 匹配指定 displayID）
-    /// 2) 自动分组（对齐原版 AutoGroupLayouts）：连续的同网格互补布局合并为一个图标
+    /// 图标条/菜单实际展示的布局列表：按作用域过滤（-1 所有屏幕 或 匹配指定 displayID）。
+    /// 原版的「自动分组」（相邻互补单区域布局合并成一个图标）已删（2026-11-13 用户定案）：
+    /// 这里一个布局本就是多区域一体设计，默认内置布局也没有任何可合并的相邻对。
     static func displayLayouts(for displayID: CGDirectDisplayID?) -> [TidyLayout] {
-        var scoped = layouts
-        if let display = displayID {
-            scoped = scoped.filter { $0.scope == -1 || $0.scope == Int(display) }
-        }
-        guard Prefs.autoGroupLayouts else { return scoped }
-
-        var mergedList: [TidyLayout] = []
-        var index = 0
-        while index < scoped.count {
-            var current = scoped[index]
-            var next = index + 1
-            while next < scoped.count, TidyLayout.groupable(current, scoped[next]) {
-                current = TidyLayout.merged(current, scoped[next])
-                next += 1
-            }
-            mergedList.append(current)
-            index = next
-        }
-        return mergedList
+        guard let display = displayID else { return layouts }
+        return layouts.filter { $0.scope == -1 || $0.scope == Int(display) }
     }
 }

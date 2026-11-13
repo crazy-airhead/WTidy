@@ -308,63 +308,26 @@ struct SnapEngineTests {
         #expect(LayoutStore.layouts[0].regionHotkeys.isEmpty)
     }
 
-    // MARK: - 自动分组（原版 AutoGroupLayouts）
+    // MARK: - 作用域过滤
 
-    @Test func autoGroupMerge() {
-        let saved = Prefs.autoGroupLayouts
-        defer { Prefs.autoGroupLayouts = saved }
-
-        // 左半 + 右半 自定义布局：互补可合并
-        let left = TidyLayout(id: "L", name: "左半", cols: 2, rows: 1, regions: [.init(1, 1, 1, 1)])
-        let right = TidyLayout(id: "R", name: "右半", cols: 2, rows: 1, regions: [.init(2, 1, 2, 1)])
-        #expect(TidyLayout.groupable(left, right))
-        let merged = TidyLayout.merged(left, right)
-        #expect(merged.regions.count == 2)
-        #expect(merged.normalizedRects.count == 2)
-
-        // 窄宽 + 宽窄 区域互相重叠 → 不可合并
-        let narrowWide = TidyLayout.builtins.first { $0.id == "narrowWide" }!
-        let wideNarrow = TidyLayout.builtins.first { $0.id == "wideNarrow" }!
-        #expect(!TidyLayout.groupable(narrowWide, wideNarrow))
-
-        // 作用域不同 → 不可合并
-        var scopedRight = right
-        scopedRight.scope = 5
-        #expect(!TidyLayout.groupable(left, scopedRight))
-    }
-
-    @Test func displayLayoutsScopeFilterAndGroup() {
+    @Test func displayLayoutsScopeFilter() {
         let savedLayouts = LayoutStore.layouts
-        let savedGroup = Prefs.autoGroupLayouts
-        defer {
-            LayoutStore.layouts = savedLayouts
-            Prefs.autoGroupLayouts = savedGroup
-        }
+        defer { LayoutStore.layouts = savedLayouts }
 
         let left = TidyLayout(id: "L", name: "左半", cols: 2, rows: 1, regions: [.init(1, 1, 1, 1)])
         let right = TidyLayout(id: "R", name: "右半", cols: 2, rows: 1, regions: [.init(2, 1, 2, 1)])
         let scopedOnly = TidyLayout(id: "S", name: "屏专属", cols: 2, rows: 1,
                                     regions: [.init(1, 1, 2, 1)], scope: 12345)
 
-        // 1) 自动分组：同网格互补布局合并为一个图标
-        Prefs.autoGroupLayouts = true
-        LayoutStore.layouts = [left, right]
-        let all = LayoutStore.displayLayouts(for: nil)
-        #expect(all.count == 1)
-        #expect(all[0].id == "L+R")
-        #expect(all[0].regions.count == 2)
-
-        // 2) 作用域过滤：scope=12345 的布局只出现在该屏；不同 scope 不参与合并
+        // scope=12345 的布局只出现在该屏；不指定屏则全量
         LayoutStore.layouts = [left, scopedOnly]
-        let onScreen = LayoutStore.displayLayouts(for: 12345)
-        #expect(onScreen.count == 2)                      // L(所有屏) + S(本屏)
-        let other = LayoutStore.displayLayouts(for: 99999)
-        #expect(other.count == 1 && other[0].id == "L")   // S 不在别的屏展示
+        #expect(LayoutStore.displayLayouts(for: 12345).map(\.id) == ["L", "S"])   // L(所有屏) + S(本屏)
+        #expect(LayoutStore.displayLayouts(for: 99999).map(\.id) == ["L"])        // S 不在别的屏展示
+        #expect(LayoutStore.displayLayouts(for: nil).map(\.id) == ["L", "S"])
 
-        // 3) 关闭自动分组：不合并
-        Prefs.autoGroupLayouts = false
+        // 自动分组已删（2026-11-13）：同网格互补的相邻布局各占一个图标，不再合并
         LayoutStore.layouts = [left, right]
-        #expect(LayoutStore.displayLayouts(for: nil).count == 2)
+        #expect(LayoutStore.displayLayouts(for: nil).map(\.id) == ["L", "R"])
     }
 
     @Test func scopeDecodeCompatWithoutField() {

@@ -157,7 +157,8 @@ struct SettingsRenderTests {
     }
 
     /// 布局行快捷键纵列防回归：每区域一个录制钮 + 行尾清除钮（未录制隐藏），
-    /// 纵列在行内右对齐、垂直居中且不压左侧文字区（文字列 x=178 宽 250，列 minX 须 > 428）。
+    /// 纵列右缘钉「行宽 − 24」（overlay 滚动条 17pt + 呼吸；legacy 模式行宽缩到 611 时同样成立，
+    /// 不能把 628 当前提——测试进程的滚动条偏好随先后测试波动，实测两种都出现过）。
     @Test func layoutRowRecorderColumn() {
         _ = NSApplication.shared
         let controller = SettingsWindowController.shared
@@ -219,10 +220,16 @@ struct SettingsRenderTests {
         #expect(clears.allSatisfy { $0.alphaValue == 0 && !$0.isEnabled },
                 "未录制的清除钮应淡出禁点（占位不折叠），实际 \(clears.map { ($0.alphaValue, $0.isEnabled) })")
 
-        // 纵列右对齐且不压文字区
+        // 纵列右对齐且不压滚动条
         if let column = rowView.subviews.first(where: { $0 is NSStackView }) {
-            #expect(column.frame.minX > 428, "录制钮纵列不应压文字区（minX 须 > 428），实际 \(column.frame.minX)")
-            #expect(column.frame.maxX <= 613, "录制钮纵列右缘应留 16pt 边距（628−16），实际 maxX \(column.frame.maxX)")
+            // 右缘 = 行宽 − 24：24 = overlay 滚动条宽 17 + 7 呼吸，✕ 不得探进条区
+            // （2026-11-13 用户反馈：16pt 时 ✕ 右缘 612 已在条区 611~628 内 1pt）。
+            // 按行宽算而非常量 628：legacy 滚动条占宽时行缩到 611，✕ 依旧距可视右缘 24pt
+            let rowWidth = rowView.frame.width
+            #expect(abs(column.frame.maxX - (rowWidth - 24)) < 0.5,
+                    "录制钮纵列右缘应钉「行宽 − 24」（避开 17pt 滚动条），行宽 \(rowWidth)、实际 maxX \(column.frame.maxX)")
+            #expect(abs(column.frame.midY - rowView.bounds.midY) < 0.5,
+                    "录制钮纵列应在行内垂直居中，实际 midY \(column.frame.midY) vs 行 \(rowView.bounds.midY)")
             #expect(column.frame.height <= SettingsWindowController.rowHeight,
                     "录制钮纵列不应超出行高 \(SettingsWindowController.rowHeight)，实际 \(column.frame.height)")
         } else {

@@ -146,6 +146,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         layoutScrollView.hasVerticalScroller = true
         layoutScrollView.autohidesScrollers = true
         layoutScrollView.drawsBackground = false
+        // 同页面滚动容器：无横向内容，禁横向回弹（触控板左右甩动不再晃动）
+        layoutScrollView.horizontalScrollElasticity = .none
         layoutScrollView.translatesAutoresizingMaskIntoConstraints = false
         // 列表吃掉页面剩余高度（≥420 下限），消除底部大空白：
         // 仅本页用 .fill 分布 + 栈高 ≥ 视口（优先级 900，可被内容增长自然突破转为滚动），
@@ -258,6 +260,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         scroll.autohidesScrollers = true
         scroll.drawsBackground = false
         scroll.documentView = stack
+        // 页面是固定宽内容列，没有横向内容；禁掉横向回弹，
+        // 免得触控板左右一甩整页晃动、看起来像能横滚（2026-11-13 用户反馈）
+        scroll.horizontalScrollElasticity = .none
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
             stack.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
@@ -278,7 +283,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     private let statusIconCheck = NSButton(checkboxWithTitle: L("显示菜单栏状态图标"), target: nil, action: nil)
     private let namesCheck = NSButton(checkboxWithTitle: L("在布局图标上显示名称"), target: nil, action: nil)
     private let warnCheck = NSButton(checkboxWithTitle: L("窗口未能调整尺寸时显示警告"), target: nil, action: nil)
-    private let groupCheck = NSButton(checkboxWithTitle: L("自动分组相邻互补布局"), target: nil, action: nil)
     private let themeInkRadio = NSButton(radioButtonWithTitle: L("墨蓝"), target: nil, action: nil)
     private let themeGraphiteRadio = NSButton(radioButtonWithTitle: L("石墨"), target: nil, action: nil)
     private let themeTealRadio = NSButton(radioButtonWithTitle: L("青碧"), target: nil, action: nil)
@@ -329,10 +333,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         optionShowRadio.target = self
         optionShowRadio.action = #selector(optionKeyModeChanged)
         stack.addArrangedSubview(groupBox([behaviorIntro, optionHideRadio, optionShowRadio,
-                                           statusIconCheck, groupCheck, namesCheck, warnCheck]))
+                                           statusIconCheck, namesCheck, warnCheck]))
 
-        // 注意：groupCheck 已在「行为」框——同一控件实例不能进第二个容器（会被静默移走）
-        // 「窗口调整」区已删除（对齐原版）：拖拽分屏 / 全局快捷键 / 吸附动画均为常开行为，不设开关
+        // 「窗口调整」区已删除（对齐原版）：拖拽分屏 / 全局快捷键 / 吸附动画均为常开行为，不设开关。
+        // 自动分组勾选框已删（2026-11-13 用户定案）：布局模型本就是多区域一体设计，
+        // 默认内置布局无任何相邻互补对可分组，开关是空转死功能。
         stack.addArrangedSubview(Design.Text.sectionTitle(L("图标条配色")))
         stack.addArrangedSubview(groupBox([themeInkRadio, themeGraphiteRadio, themeTealRadio, themeVioletRadio]))
 
@@ -530,8 +535,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         namesCheck.action = #selector(namesChanged)
         warnCheck.target = self
         warnCheck.action = #selector(warnChanged)
-        groupCheck.target = self
-        groupCheck.action = #selector(groupChanged)
         for radio in [themeInkRadio, themeGraphiteRadio, themeTealRadio, themeVioletRadio] {
             radio.target = self
             radio.action = #selector(stripThemeChanged)
@@ -557,7 +560,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         statusIconCheck.state = Prefs.showStatusIcon ? .on : .off
         namesCheck.state = Prefs.showLayoutNames ? .on : .off
         warnCheck.state = Prefs.warnOnFail ? .on : .off
-        groupCheck.state = Prefs.autoGroupLayouts ? .on : .off
         themeInkRadio.state = Prefs.stripTheme == 0 ? .on : .off
         themeGraphiteRadio.state = Prefs.stripTheme == 1 ? .on : .off
         themeTealRadio.state = Prefs.stripTheme == 2 ? .on : .off
@@ -603,7 +605,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     @objc private func statusIconChanged() { Prefs.showStatusIcon = statusIconCheck.state == .on }
     @objc private func namesChanged() { Prefs.showLayoutNames = namesCheck.state == .on }
     @objc private func warnChanged() { Prefs.warnOnFail = warnCheck.state == .on }
-    @objc private func groupChanged() { Prefs.autoGroupLayouts = groupCheck.state == .on }
     @objc private func stripThemeChanged() {
         if themeInkRadio.state == .on { Prefs.stripTheme = 0 }
         else if themeGraphiteRadio.state == .on { Prefs.stripTheme = 1 }
@@ -1215,6 +1216,9 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
         scroll.autohidesScrollers = true
         scroll.drawsBackground = false
         scroll.documentView = stack
+        // 页面是固定宽内容列，没有横向内容；禁掉横向回弹，
+        // 免得触控板左右一甩整页晃动、看起来像能横滚（2026-11-13 用户反馈）
+        scroll.horizontalScrollElasticity = .none
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
             stack.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
@@ -1418,12 +1422,16 @@ extension SettingsWindowController {
             row.spacing = 6
             recColumn.addArrangedSubview(row)
         }
-        let colSize = recColumn.fittingSize
-        // 右缘留 16pt：12pt 会贴着 overlay 滚动条（✕ 与滚动条零间隙，同截图反馈）
-        recColumn.frame = NSRect(x: Self.columnWidth - 16 - colSize.width,
-                                 y: (Self.rowHeight - colSize.height) / 2,
-                                 width: colSize.width, height: colSize.height)
+        // 右缘钉 cell.trailing − 24，不用按常量 628 算的静态 frame：
+        // 16pt 仍会探进 overlay 滚动条区域（条宽 17pt，✕ 右缘 612 在 611~628 内，视觉贴条）；
+        // legacy 滚动条（接鼠标/「始终显示」）会把可视区缩到 611，静态 frame 直接把 ✕ 裁出可视区。
+        // 约束钉在 cell 右缘则两种样式都自动跟随。24 = 17 条宽 + 7 呼吸。
+        recColumn.translatesAutoresizingMaskIntoConstraints = false
         cell.addSubview(recColumn)
+        NSLayoutConstraint.activate([
+            recColumn.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -24),
+            recColumn.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+        ])
 
         return cell
     }

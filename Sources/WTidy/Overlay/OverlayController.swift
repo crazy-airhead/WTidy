@@ -19,7 +19,7 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
     private var stripRectsGlobal: [CGRect] = []
     private var zonesGlobal: [CGRect] = []
     private var frameMemory = FrameMemory()
-    /// 当前屏实际展示的布局（作用域过滤 + 自动分组后）
+    /// 当前屏实际展示的布局（作用域过滤后）
     private var visibleLayouts: [TidyLayout] = []
 
     /// 吸附成功回调（用于状态栏展示与日志），参数为人类可读描述
@@ -307,12 +307,10 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
         return snapFrontmost(layout: layout, zoneIndex: zone)
     }
 
-    /// 菜单「应用布局」按 id 查找（兼容自动分组产生的合并 id）
+    /// 菜单「应用布局」按 id 查找
     @discardableResult
     func applyLayoutByID(_ id: String) -> Bool {
-        let display = LayoutStore.displayLayouts(for: nil)
-        let layout = display.first { $0.id == id } ?? LayoutStore.layout(id: id)
-        guard let layout = layout else { return false }
+        guard let layout = LayoutStore.layout(id: id) else { return false }
         return applyLayoutToWindow(layout)
     }
 
@@ -396,11 +394,6 @@ final class OverlayController: NSObject, WindowWatcherDelegate {
         case ("center", 0): return L("居中")
         default:
             if layout.regions.count > 1 {
-                // 自动分组合并的布局（id 形如 a+b，名称形如 L("甲 / 乙")）：按区域取对应名称
-                if layout.id.contains("+") {
-                    let names = layout.name.components(separatedBy: " / ")
-                    if names.indices.contains(index) { return names[index] }
-                }
                 return LF("%1$@ 区域%2$d", layout.name, index + 1)
             }
             return layout.name
