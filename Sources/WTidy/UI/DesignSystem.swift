@@ -115,30 +115,138 @@ enum Design {
 
     /// 设置窗口与布局编辑器共用的文本构造器；禁止各窗口再造私有版本。
     enum Text {
+        /// 唯一建标列入口：创建即关 autoresizing。NSStackView 不会替 arranged 子视图关
+        /// `translatesAutoresizingMaskIntoConstraints`，残留的 `width == 单行固有宽`
+        /// 必需约束（NSTextFieldSimpleLabel 自动生成）会与限宽 ≤ 列宽的必需约束打架，
+        /// 求解器任意破约——布局页长文案实测渲染 631pt 越过 628 列宽（2026-11-13 实证）。
+        private static func makeLabel(_ text: String, font: NSFont) -> NSTextField {
+            let f = NSTextField(labelWithString: text)
+            f.font = font
+            f.translatesAutoresizingMaskIntoConstraints = false
+            return f
+        }
+
         /// 小节标题（分组框标题在外）：13pt semibold
         static func sectionTitle(_ text: String) -> NSTextField {
-            let f = NSTextField(labelWithString: text)
-            f.font = Design.Font.sectionTitle
+            let f = makeLabel(text, font: Design.Font.sectionTitle)
             return f
         }
 
         /// 正文标签：12pt
         static func bodyLabel(_ text: String) -> NSTextField {
-            let f = NSTextField(labelWithString: text)
-            f.font = Design.Font.body
-            return f
+            makeLabel(text, font: Design.Font.body)
         }
 
-        /// 说明文字：10pt 灰色小字，最多 2 行换行；wrapWidth 限定换行宽度
+        /// 说明文字：10pt 灰色小字，最多 2 行换行；wrapWidth 限定换行宽度。
+        /// 见 `CaptionField`——macOS 26/27 上必须专用字段才能真换行。
         static func caption(_ text: String, wrapWidth: CGFloat? = nil) -> NSTextField {
-            let f = NSTextField(labelWithString: text)
-            f.font = Design.Font.caption
-            f.textColor = .secondaryLabelColor
-            f.lineBreakMode = .byWordWrapping
-            f.maximumNumberOfLines = 2
-            if let wrapWidth { f.preferredMaxLayoutWidth = wrapWidth }
-            return f
+            CaptionField(text: text, wrapWidth: wrapWidth)
         }
+
+        /// 限宽在内容列内：英文翻译比中文长，放任固有宽度会溢出内容列甚至窗口，
+        /// 并让约束求解器连带挤歪同行/下方元素（2026-11-13 十一、十六次核对）。
+        /// 设置页（列宽 628）与编辑器（列宽 512）共用，列宽由调用方按窗口几何给出。
+        static func capped(_ label: NSTextField, width: CGFloat) -> NSTextField {
+            label.widthAnchor.constraint(lessThanOrEqualToConstant: width).isActive = true
+            CaptionField.stripWidthPins(label)
+            return label
+        }
+    }
+}
+
+/// 说明文字专用字段（`Design.Text.caption`）。
+/// macOS 26/27 的 NSTextField（labelWithString / wrappingLabelWithString 皆同）内嵌
+/// NSTextFieldSimpleLabel 渲染视图，有两个绕不开的坑：
+/// ① 内嵌视图带 `width == 单行固有宽` 的必需 autoresizing 约束，且
+///    `translatesAutoresizingMaskIntoConstraints` 对它无效——与限宽 ≤ 列宽的必需约束
+///    冲突时求解器任意破约，实测长文案渲染 631pt 越过 628 列宽、编辑器说明横穿窗口
+///    并连带挤歪取消/保存行（2026-11-13 用户截图 + 测试实证）；
+/// ② intrinsic 不随 preferredMaxLayoutWidth 重算，恒报单行高 → 换行后第二行被裁。
+/// 对策：cell 配成换行；每次布局拔宽度钉（AppKit 会重挂，故随 layout 自愈）；
+/// 换行 intrinsic 不问 AppKit，直接按列宽向 cell 求 fitted 尺寸。
+final class CaptionField: NSTextField {
+    /// 换行目标宽度（nil = 不限宽，单行显示）
+    private let wrapWidth: CGFloat?
+
+    init(text: String, wrapWidth: CGFloat?) {
+        self.wrapWidth = wrapWidth
+        super.init(frame: .zero)
+        font = Design.Font.caption
+        textColor = .secondaryLabelColor
+        isEditable = false
+        isSelectable = false
+        isBezeled = false
+        isBordered = false
+        drawsBackground = false
+        if let cell = cell as? NSTextFieldCell {
+            cell.wraps = true
+            cell.isScrollable = false
+            cell.lineBreakMode = .byWordWrapping
+        }
+        maximumNumberOfLines = 2
+        translatesAutoresizingMaskIntoConstraints = false
+        if let wrapWidth { preferredMaxLayoutWidth = wrapWidth }
+        // 宽度双保险：必需等宽约束（约束层）+ setFrameSize 钳制（自绘层）。
+        // simple label 的自绘机制会绕过约束求解直接按 cell fitted 尺寸赋 frame
+        // （实测 fitted 512 → frame 516，+4 内嵌 padding），只靠约束压不住。
+        if let wrapWidth {
+            widthAnchor.constraint(equalToConstant: wrapWidth).isActive = true
+        }
+        stringValue = text
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        var size = newSize
+        if let wrapWidth, size.width > wrapWidth { size.width = wrapWidth }
+        super.setFrameSize(size)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    /// 拔掉子树里的 autoresizing 宽度钉（私有类，按类型名识别）。
+    /// 仅 deactivate 会被 AppKit 在下次布局重挂——必须同时关掉持有者的
+    /// translatesAutoresizingMaskIntoConstraints，钉才会根除。
+    /// 返回是否拔过（调用方据此触发重排：本遍 frame 是带着钉算出的）。
+    @discardableResult
+    static func stripWidthPins(_ view: NSView) -> Bool {
+        var stripped = false
+        for c in view.constraints
+        where c.firstAttribute == .width && String(describing: type(of: c)).contains("AutoresizingMask") {
+            c.isActive = false
+            if let item = c.firstItem as? NSView {
+                item.translatesAutoresizingMaskIntoConstraints = false
+            }
+            stripped = true
+        }
+        return stripped
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        Self.stripWidthPins(self)
+    }
+
+    override func layout() {
+        super.layout()
+        // 在 super.layout() 之后拔：AppKit 的内嵌视图自适应会在此过程中重挂宽度钉，
+        // 先拔会被冲掉。本遍 frame 是带着钉算出的，标记重排让下一遍收敛。
+        if Self.stripWidthPins(self) {
+            needsLayout = true
+            superview?.needsLayout = true
+        }
+    }
+
+    /// 换行 intrinsic = 向 cell 求「列宽内的 fitted 尺寸」：宽取 min(单行宽, 列宽)，
+    /// 高取 fitted 高（cell.wraps=true 时即换行后高度，maximumNumberOfLines 一并生效）
+    override var intrinsicContentSize: NSSize {
+        guard let wrapWidth, wrapWidth > 0, let cell = cell as? NSTextFieldCell else {
+            return super.intrinsicContentSize
+        }
+        let single = cell.cellSize
+        let fitted = cell.cellSize(forBounds: NSRect(x: 0, y: 0, width: wrapWidth, height: 10_000))
+        return NSSize(width: min(single.width, wrapWidth), height: fitted.height)
     }
 }
 

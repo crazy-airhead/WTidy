@@ -87,7 +87,7 @@ final class StatusMenuController: NSObject {
         let snapDetail = lastSnapText.map { LF("最近吸附：%@", $0) }
         switch state {
         case .ok:
-            statusItem.button?.image = Self.symbolImage("rectangle.split.2x2", tint: nil, alpha: 1)
+            statusItem.button?.image = Self.brandGlyphImage()
             statusItem.button?.alphaValue = 1
             statusLine.attributedTitle = Self.dotTitle(L("正常监听中"), color: .systemGreen,
                                                        detail: snapDetail ?? L("拖拽任意窗口顶部即可分屏"))
@@ -136,6 +136,34 @@ final class StatusMenuController: NSObject {
     }
 
     // MARK: - 图标与文案
+
+    /// 品牌标记模板图（两窗格 + 条带窗）：菜单栏正常态图标，随系统明暗自动反色；
+    /// 右窗格 45% 透明度复刻 App 图标「选中/未选中」的关系
+    private static func brandGlyphImage() -> NSImage {
+        let s: CGFloat = 18
+        let img = NSImage(size: NSSize(width: s, height: s))
+        img.lockFocus()
+        if let ctx = NSGraphicsContext.current?.cgContext {
+            let gap = s * 0.08
+            let cell = (s * 0.80 - gap) / 2
+            let x0 = s * 0.10
+            let stripY = s * 0.10
+            let rowY = stripY + cell + gap
+            func rr(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) -> CGPath {
+                CGPath(roundedRect: CGRect(x: x, y: y, width: w, height: h),
+                       cornerWidth: s * 0.08, cornerHeight: s * 0.08, transform: nil)
+            }
+            // 未选中窗格（半透明）先画，实心块后画
+            ctx.setFillColor(NSColor.black.withAlphaComponent(0.45).cgColor)
+            ctx.addPath(rr(x0 + cell + gap, rowY, cell, cell)); ctx.fillPath()
+            ctx.setFillColor(NSColor.black.cgColor)
+            ctx.addPath(rr(x0, rowY, cell, cell)); ctx.fillPath()
+            ctx.addPath(rr(x0, stripY, s * 0.80, cell)); ctx.fillPath()
+        }
+        img.unlockFocus()
+        img.isTemplate = true
+        return img
+    }
 
     private static func symbolImage(_ name: String, tint: NSColor?, alpha: CGFloat) -> NSImage? {
         guard let base = NSImage(systemSymbolName: name, accessibilityDescription: "WTidy") else { return nil }

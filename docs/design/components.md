@@ -52,11 +52,11 @@
 
 **分组框**（`groupBox(_:)`）：标题在外的小节标题 + `NSBox(.primary)` 圆角框，内部垂直栈行距 `groupGap`、边距 `groupInsets`。
 
-**说明文字**：`Text.caption`——10pt、`secondaryLabelColor`、最多 2 行换行；**必须限宽在内容列内**（`columnCapped`：页面级 ≤628、分组框内 ≤600），并用 `wrapWidth` 让两行高度计算正确——英文翻译比中文长，放任固有宽度会溢出窗口被裁断（2026-11-13 实测）。
+**说明文字**：`Text.caption`（`CaptionField`，见 §7）——10pt、`secondaryLabelColor`、最多 2 行换行；**必须限宽在内容列内**（`Text.capped`：页面级 ≤628、分组框内 ≤600、编辑器 ≤512），并用 `wrapWidth` 让两行高度计算正确——英文翻译比中文长，放任固有宽度会溢出窗口被裁断（2026-11-13 实测）。
 
-**布局页**：布局列表 NSTableView（行高 96、拖拽排序、双击编辑）+ 左下 ＋/− 圆角小按钮 + 右侧「恢复内置布局」。**列表高度吃掉页面剩余（≥420 下限）**：本页独用 `.fill` 分布 + 栈高 ≥ 视口（优先级 900）+ 列表垂直拥抱 200（全页最低），底部无大空白；行多时列表内部滚动，页面不溢出。列表行结构：缩略图 150×84（共用渲染器 `.light`）→ 名称 `listTitle` → 描述 `body` → 作用域 `hint`+tertiary → 右侧快捷键纵列（每区域一个录制钮，多区域带「区域 N」角标；直接吸到该区域，跳过投影选区；旧版布局级快捷键若已设保留在列顶可改可清）。
+**布局页**：布局列表 NSTableView（行高 108（`rowHeight` 常量：容四区域 4×24pt 录制钮；96 配 22pt 钮偏矮）、拖拽排序、双击编辑）+ 左下 ＋/− 圆角小按钮 + 右侧「恢复内置布局」。**列表高度吃掉页面剩余（≥420 下限）**：本页独用 `.fill` 分布 + 栈高 ≥ 视口（优先级 900）+ 列表垂直拥抱 200（全页最低），底部无大空白；行多时列表内部滚动，页面不溢出。列表行结构：缩略图 150×84（共用渲染器 `.light`，行内垂直居中）→ 名称 `listTitle` → 描述 `body` → 作用域 `hint`+tertiary → 右侧快捷键纵列（每区域一行「区域 N」角标 + 录制钮 + ✕ 清除钮；按下直接吸到该区域，跳过投影选区。**角标钉宽 44、纵列右缘留 16pt、✕ 钉死 16×16 并关 translates**——列几何恒定，按钮跨行/跨布局同一条竖线，✕ 紧贴按钮 6pt 不悬空（不钉约束时 NSStackView fittingSize 只按图像 intrinsic 计 ~3pt，列宽错、✕ 悬空 13pt）；右缘 12pt 会贴 overlay 滚动条。布局级快捷键已删——2026-11-13 用户定案只要区域级）。
 
-**快捷键录制**（统一在列表行内，编辑器不设——一处配置、冲突一目了然；`HotkeyRecorderButton`，`makeShortcutRecorder` 统一接线）：点击进入录制态（强调色描边高亮 + 「输入快捷键…」）；按下含修饰键的组合即录；Esc 取消；Delete/⌦ 清除；无修饰键的按键即时标题提示、不静默吞掉。录制完成先过 `HotkeyManager.conflictOwner` 冲突校验（固定动作 + 布局级 + 区域级，豁免精确同位），冲突弹窗指名占用者并保留原组合。
+**快捷键录制**（只在列表行内按区域录制，编辑器不设——一处配置、冲突一目了然；`HotkeyRecorderButton` + 行尾 `HotkeyClearButton`，`makeShortcutRecorder`/`makeClearButton` 统一接线）：**标题一律由状态派生**（录制中「输入快捷键…」/ 未录占位「录制」/ 已录回显组合文本）——禁止用 previousTitle 之类回填（视图离树触发 `viewDidMoveToWindow(nil)` 会把标题抹空 → 空白灰钮，2026-11-13 用户截图定位）；且 init 里的属性赋值不触发 didSet（Swift 观察者不跑于初始化期，实测），构造后必须显式 `syncTitle()`。点击进入录制态（强调色 bezel 高亮）；含修饰键组合即录；Esc 取消；清除两条路：行尾 ✕（未录制**淡出禁点但占位**——不用 isHidden 折叠，折叠会让已录制行比未录制行宽 22pt 致跨行不对齐；悬停强调色）或录制中按 ⌫/⌦；无修饰键按键即时短提示「需修饰键」。录制完成先过 `HotkeyManager.conflictOwner` 冲突校验（固定动作 + 区域级，豁免精确同位），冲突弹窗指名占用者并保留原组合。
 
 **行为页**：三组分组框（行为 / 图标条配色 / 背景）。拖拽分屏、全局快捷键、吸附动画为常开行为，不设开关（对齐原版，2026-11-13 删除「窗口调整」组）。配色主题四单选；背景组含 220×124 预览井（图标主题深底或壁纸+蒙板，铺法与图标条一致）+ 两按钮。缺权限时页首追加黄色警告行（`systemYellow` 图标 + `body` 文字 + 「去授权」按钮）。
 
@@ -68,7 +68,8 @@
 
 ## 4. 布局编辑器（`LayoutEditorWindowController` + `LayoutGridCanvasView`）
 
-- 560×740 弹窗，页面栈边距与设置页一致（`pageInsets`）；字段行 = `Text.bodyLabel` 标签 + 控件，行距 `groupGap`。内容装滚动容器（`PageStackView` 翻转文档视图），超高内容滚动不溢出。快捷键不在编辑器设——统一在布局列表行内按区域录制。
+- 560×740 弹窗，页面栈边距与设置页一致（`pageInsets`）；**内容列宽 512**（`columnWidth` = 560 − pageInsets 左右 48，与设置页「元素与内容列同宽」同一硬规则）：说明文字限宽换行、画布（512×320，16:10 与真实屏等比）、取消/保存行（512，取消居左、保存贴列右缘，默认键 ⏎）一律按它对齐。字段行 = `Text.bodyLabel` 标签 + 控件，行距 `groupGap`；小节间距 `stackGap`，画布与删除钮行贴 `groupGap`。内容装滚动容器（`PageStackView` 翻转文档视图），超高内容滚动不溢出。快捷键不在编辑器设——统一在布局列表行内按区域录制。
+- **说明文字**：`Text.caption` + `Text.capped(…, width: 512)`——英文翻译比中文长（~557pt > 512），未限宽会满窗溢出并连带挤歪取消/保存行（2026-11-13 用户截图两处红框同根因）；caption 必须走 `CaptionField`（§7：simple label 单行钉宽在本机压不住）。
 - **网格画布**：`wallpaperRamp` 三 stop 底 + `gridLineLight` 网格 + 区域块（`cellInkFill`/`cellAccentStroke`，圆角 `cell`，内缩 1.5pt）——与图标 `.light` 风格同源。选中 = `focusLine` 2.5pt。交互：空白拖=画、点住拖=移、画错点删。
 - **预览**：共用渲染器缩略图，CALayer 边框 `separatorColor` + 圆角 `insetFrame`。
 - 控制器必须静态持有到窗口关闭（`isReleasedWhenClosed = false`，防提前释放）。
@@ -97,9 +98,12 @@
 |---|---|
 | `sectionTitle(_:)` | 小节标题：`Font.sectionTitle`，默认 label 色 |
 | `bodyLabel(_:)` | 正文标签：`Font.body` |
-| `caption(_:wrapWidth:)` | 说明文字：`Font.caption` + `secondaryLabelColor` + 2 行换行 |
+| `caption(_:wrapWidth:)` | 说明文字：`CaptionField`——`Font.caption` + `secondaryLabelColor` + 2 行换行 |
+| `capped(_:width:)` | 限宽 ≤ 内容列（等宽约束 + 拔 autoresizing 宽度钉）；设置页 `columnCapped` 是其包装 |
 
-设置窗口与布局编辑器**必须共用**这三个助手，不得各自再造私有版本。
+设置窗口与布局编辑器**必须共用**这些助手，不得各自再造私有版本。
+
+**`CaptionField`（caption 专用字段）**：macOS 26/27 的 NSTextField 内嵌 `NSTextFieldSimpleLabel` 渲染视图，单行钉宽（`width == 单行固有宽` 必需 autoresizing 约束，`translatesAutoresizingMaskIntoConstraints=false` 对其无效）+ intrinsic 恒报单行高——普通 label 的「限宽 + 2 行换行」在本机根本不成立：宽度与列宽约束打架时求解器任意破约（实测长文案 631pt 越过 628 列宽、编辑器说明横穿窗口），高度恒单行导致第二行被裁。对策三件套：cell 配 `wraps=true`；每次布局拔内嵌宽度钉（AppKit 会重挂，随 `layout()` 自愈）；换行 intrinsic 按列宽向 cell 求 fitted 尺寸自算，并钳制 `setFrameSize`（自绘层会绕过约束直接按 fitted 尺寸 + 内嵌 padding 赋 frame）。
 
 ## 8. 动效与窗口动画（`Core/WindowAnimator.swift`）
 

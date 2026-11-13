@@ -60,11 +60,13 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         stack.edgeInsets = Design.Spacing.onboardingInsets
         stack.translatesAutoresizingMaskIntoConstraints = false
 
-        // 头部
-        let iconConfig = NSImage.SymbolConfiguration(pointSize: 44, weight: .light)
-        let icon = NSImageView(image: NSImage(systemSymbolName: "rectangle.split.2x2", accessibilityDescription: nil)?
-            .withSymbolConfiguration(iconConfig) ?? NSImage())
-        icon.contentTintColor = .controlAccentColor
+        // 头部：品牌图标（读 AppIcon.icns，与正式 Logo 同源）
+        let icon = NSImageView(image: NSApp.applicationIconImage)
+        icon.imageScaling = .scaleProportionallyUpOrDown
+        NSLayoutConstraint.activate([
+            icon.widthAnchor.constraint(equalToConstant: 64),
+            icon.heightAnchor.constraint(equalToConstant: 64),
+        ])
 
         let title = NSTextField(labelWithString: "WTidy")
         title.font = Design.Font.heroTitle

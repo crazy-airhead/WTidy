@@ -157,6 +157,7 @@
 
 ## 7. 图标与符号
 
-- 只用 SF Symbols（`NSImage(systemSymbolName:)`），品牌主符号 `rectangle.split.2x2`。
-- 需要着色时用 `contentTintColor`（强调色/状态色），菜单栏三态图标中着色版用 `sourceAtop` 叠染；不着色时必须 `isTemplate = true`。
-- 尺寸用 `NSImage.SymbolConfiguration(pointSize:weight:)`：引导徽标 44/light、关于徽标 48/light、步骤圆号 20/semibold。
+- **品牌图标**：一律用 `NSApp.applicationIconImage`（读 bundle 的 `AppIcon.icns`，由 `scripts/make-icon.swift` 生成，改 Logo 只动那一个文件）。使用点：引导头部 64pt、关于页 72pt；`imageScaling = .scaleProportionallyUpOrDown` + 宽高约束钉尺寸。
+- **菜单栏正常态** = 品牌标记模板图（`StatusMenuController.brandGlyphImage`：两窗格 + 条带窗的单色描形，右窗格 45% 透明度复刻图标「选中/未选中」关系，`isTemplate = true` 随菜单栏明暗反色）；缺权限态仍用 SF Symbol `exclamationmark.triangle.fill` 黄色闪烁（状态可见语义优先于品牌）。
+- 其余符号只用 SF Symbols（`NSImage(systemSymbolName:)`）；需要着色时用 `contentTintColor`（强调色/状态色），菜单栏着色版用 `sourceAtop` 叠染；不着色时必须 `isTemplate = true`。
+- SF Symbols 尺寸用 `NSImage.SymbolConfiguration(pointSize:weight:)`：步骤圆号 20/semibold。

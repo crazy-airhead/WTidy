@@ -292,3 +292,78 @@ grep -rn "xRadius\|cornerRadius" Sources/WTidy/UI Sources/WTidy/Overlay | grep -
 **防回归**：`regionShortcutConflictSemantics`（同布局跨区域/布局级撞区域/豁免同位/跨布局）、`regionHotkeysPersistenceRoundTrip`、`layoutRowRecorderColumn`（录制钮数量 = 区域数、纵列右对齐不越界）。测试教训再记一笔：`view(atColumn:row:)` 的 table 藏在列表自有 scrollView 里，别拿页面 scroll 的 documentView。
 
 **验证**：`swift test` 34/34 通过；键完整性两表 144/144 零缺口。
+
+---
+
+## 十六次核对：2026-11-13（只要区域级快捷键 + 清除可见化 + 空白钮根因）
+
+**触发**：用户截图圈出三处问题：① 布局不需要快捷键（列表行顶的「布局 ⌘H」录制行多余）；② 清除快捷键的方式（录制中按 ⌫）不可发现；③ 录制钮渲染异常——部分行的按钮是无文字的空白灰块。
+
+**根因**（比「设计不一致」严重——两个真实 bug 叠加）：
+1. **空白钮**：旧 `HotkeyRecorderButton` 用 `previousTitle` 回填标题，而视图离开层级（reloadData 回收行视图、栈重排）同样触发 `viewDidMoveToWindow(nil) → stopRecording`，从未录制过的按钮 `previousTitle` 是空串 → 标题被抹空。用户截图里 Thirds 等行的空白灰块即此。
+2. **Swift 陷阱**：init 阶段对属性赋值**不触发 didSet**（convenience init 委托后赋值也不触发，实测复现）——新代码 `displayText` 的 didSet 在构造期静默失效，标题一直是 NSButton 默认的 "Button"。用独立最小复现验证（纯类与 NSButton 子类均复现）。
+
+**修复**：
+- **删布局级快捷键**：`TidyLayout` 删 `activationKeyCode/Modifiers`（旧 JSON 字段由 Codable 静默忽略）；`HotkeyManager` 删布局级注册/分发/冲突分支（`layoutShortcutMap`、`layoutHotKeyBase`、`layoutShortcutHandler`）；`AppDelegate` 撤接线；列表行撤「布局」行。
+- **标题派生化**：`syncTitle()` 由 `recording`/`displayText` 状态推导标题，构造后显式调用；离树只收 monitor 不动标题（派生值重算也幂等）。
+- **清除可见化**：行尾 `HotkeyClearButton`（xmark.circle.fill，未录制隐藏折叠、悬停强调色）+ 页首说明文字写明「Esc 取消；点 ✕ 或按 ⌫ 清除」+ 录制钮 tooltip。
+- 冲突校验简化为固定动作 + 区域级两级（`conflictOwner` region 改非可选）；「需含修饰键（⌃⌥⌘⇧）」缩为「需修饰键」（108pt 钮内放得下）。
+
+**防回归**：`recorderTitleSurvivesHierarchyRemoval`（离树标题不抹空）、`layoutRowRecorderRecordedState`（组合回显 + ✕ 只在已录行出现 + ✕ 写回）、`legacyActivationShortcutFieldIgnored`（旧 JSON 兼容）、`layoutRowRecorderColumn` 扩展（占位标题非空 + 清除钮隐藏态）。
+
+**验证**：`swift test` 因 CLT TestingMacros 插件缺失无法运行（既有环境问题），改用真实源码 harness：17 项断言全过 + 布局页整页/已录制行离屏渲染 PNG 核对（本环境离屏渲染已能出文字，旧「文字不渲染」局限失效）。键完整性未动 strings 键位表。
+
+---
+
+## 十七次核对：2026-11-13（用户截图：布局编辑器两处红框——说明文字满窗溢出 + Save 歪位）
+
+**触发**：用户发英文界面「新增布局」编辑器截图，红框圈出：① 操作说明文字横穿整个窗口（像素实测文字 x≈3→575，内容列应为 24..536）；② 取消/保存行的 Save 不在列右缘（实测距列缘差 ~47pt）。
+
+**实证与根因**（一条因果链贯穿两处红框）：
+1. **编辑器说明文字是全应用唯一没限宽的 caption**——十六次核对前 `columnCapped` 只落在设置页。英文翻译固有宽 ~557pt > 编辑器内容列 512pt。
+2. **单行钉宽放大灾情**：`labelWithString` 生成内嵌 `NSTextFieldSimpleLabel`，被 AppKit 钉上 `width == 单行固有宽` 必需 autoresizing 约束（`translatesAutoresizingMaskIntoConstraints=false` 对内嵌视图无效）。557pt 必需钉 vs 页面栈几何必需约束冲突 → 求解器任意破约 → 说明横穿窗口 + 连带把取消/保存行挤离列缘。中文（~470pt）不冲突，所以本环境测试从未暴露——英文一开就炸（与十一次核对同款「键存在但更长翻译放不下」盲区）。
+3. **普通修复压不住**：改 `wrappingLabelWithString` / 拔 translates 均无效——内嵌视图的钉会被 AppKit 重挂，且 simple label 的自绘机制**绕过约束求解**直接按「cell fitted 尺寸 + 内嵌 padding」赋 frame（实测约束全干净后 frame 仍 = intrinsic+4）；intrinsic 还恒报单行高，换行后第二行被裁。
+4. **顺带修两处同款地雷**：布局页长文案（并发会话加长后 631pt）在同一钉下越过 628 列宽（`layoutsPageTopAligned` 十一次核对的断言挂掉暴露）；`NSStackView` 不替 arranged 子视图关 translates（画布/按钮行此前都是手工关的，文本助手漏了）。
+
+**修复**（`DesignSystem.swift` + `SettingsWindow.swift`）：
+- `CaptionField`（caption 专用字段）：cell 配 `wraps=true`；每次布局拔内嵌宽度钉（关 translates + deactivate，AppKit 重挂随 `layout()` 自愈）；换行 intrinsic 按列宽向 cell 求 fitted 尺寸自算；`setFrameSize` 钳制到列宽（治自绘层绕过约束）。
+- `Design.Text.capped(_:width:)` 共享限宽助手（设置页 `columnCapped` 收编为包装），编辑器新增 `columnWidth = 512` 常量；画布 480×300 → 512×320（右缘与列对齐、保持 16:10）；取消/保存行、画布行同宽对齐。
+- 编辑器残留魔法间距收敛为令牌（4/8/10/12/14 → `groupGap`/`stackGap`）。
+- `PageStackView.addArrangedSubview` 统一关 arranged 子视图 translates（补 NSStackView 不做的那半件事）。
+
+**防回归**：`editorPageStaysInContentColumn`——灌入超列长文本模拟英文场景（测试进程跑中文不溢出，直接断言会假绿），锁定说明文字限宽贴左不越缘、换行 intrinsic 两行高、画布/保存钮右缘与列对齐；`layoutsPageTopAligned` 的说明文字断言保留并补宽度（此前的断言对象实际是布局页 caption 本体，未动语义）。
+
+**验证**：`swift test` 37/37 通过（含并发会话新增测试）。CLT TestingMacros 插件缺失在整模块重编时复发——`touch Package.swift` 强制重规划 + 失败重试可恢复（`swift package reset` 无效），已记入记忆。
+
+---
+
+## 十七次核对：2026-11-13（录制列对齐 + 右边距）
+
+**触发**：用户截图指出已录制行（行尾带 ✕）与未录制行的录制钮不在一条竖线上，且 ✕ 贴着滚动条没有右边距。
+
+**根因**：✕ 未录制时用 isHidden 折叠——已录制行的列比未录制行宽 22pt（✕ 16 + 间距 6），trailing 定位下整列左移；右缘边距 12pt 与 overlay 滚动条（~14pt）零间隙。
+
+**修复**：
+- ✕ 未录制改**淡出禁点但占位**（`alphaValue = 0` + `isEnabled = false` + 无障碍隐藏），行结构恒定 → 跨行/跨布局同一条竖线。
+- 「区域 N」角标**钉宽 44**：行栈宽度不再随标签文字度量（"Region 1" vs "Region 4" 亚像素差）抖动 1–2pt。
+- 纵列右缘边距 12→16pt，与 overlay 滚动条拉开间隙。
+
+**防回归**：`layoutRowRecorderColumn` 补录制钮左缘对齐断言（注意 4 个钮分属 4 个行栈，必须 `rowView.convert(_, from: superview)` 换算到行视图坐标再比，直接比 frame.minX 是跨坐标系假比较）+ 淡出占位断言；右缘上限 617→613。
+
+**验证**：harness 18 项断言全过（对齐 minX [484×4]、右缘 612）；渲染图核对全行对齐与右边距。
+
+---
+
+## 十八次核对：2026-11-13（单区域行 ✕ 悬空 + 录制钮加高）
+
+**触发**：用户截图：单区域布局（居中/最大化）的 ✕ 离按钮 ~13pt 悬空；录制钮 22pt 在 96pt 行里偏矮不协调。
+
+**根因**：`HotkeyClearButton` 没钉宽高约束（frame 16×16 + translates=true）——NSStackView 对它的 fittingSize 只按图像 intrinsic 计入 ~3pt，行栈 fittingSize 少算 → 列宽错、✕ 被推到行尾悬空。
+
+**修复**：
+- ✕ 钉死 16×16 + `translatesAutoresizingMaskIntoConstraints = false`（录制钮同待遇）；fittingSize 精确，单/多区域行 ✕ 均紧贴按钮 6pt、右缘与列恒对齐 612。
+- 行高 96→**108**（`rowHeight` 常量），录制钮 22→**24**（四分 4×24+3×2=102 容得下）；缩略图/名称/描述/作用域 y 随行高平移重排。
+
+**防回归**：`layoutRowRecorderColumn` 加钮高 24 断言、行高断言引用 `rowHeight` 常量；harness 加单区域行 ✕ 间隙（=6pt）与右缘（=612）断言。
+
+**验证**：`swift test` 37/37；harness 23 项全过；已录制单区域行渲染图核对 ✕ 紧贴、按钮垂直居中。

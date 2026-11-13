@@ -37,7 +37,10 @@
 "打开系统设置授权" = "Authorize in System Settings";
 "点此打开系统设置授权" = "Click to open System Settings and authorize";
 "输入快捷键…" = "Type a shortcut…";
-"需含修饰键（⌃⌥⌘⇧）" = "Requires a modifier key (⌃⌥⌘⇧)";
+"需修饰键" = "Needs modifier";
+"点击录制，Esc 取消" = "Click to record, Esc to cancel";
+"清除快捷键" = "Clear Shortcut";
+"清除该快捷键" = "Clear this shortcut";
 "快捷键冲突" = "Shortcut Conflict";
 "该组合已被「%@」占用，请换一个。" = "This combination is already used by \"%@\".";
 "好" = "OK";
@@ -149,4 +152,4 @@
 "%d × %d 网格" = "%d × %d grid";
 "拖拽任意窗口，屏幕顶部会出现布局条；悬停选择布局后松手即吸附。\n快捷键示例：⌥⌘← 左半屏，⌃⌥⌘F 最大化，⌃⌥⌘Z 恢复位置。" = "Drag any window — a layout bar appears at the top of the screen;\nhover to pick a layout and release to snap.\nHotkey examples: ⌥⌘← left half, ⌃⌥⌘F maximize, ⌃⌥⌘Z restore position.";
 "arm64 原生 · 看门狗自愈 · 现代登录项" = "arm64 native · self-healing watchdog · modern login item";
-"拖动可更改布局顺序，双击编辑；右侧可为每个区域录制快捷键，按下直接把前台窗口吸到该区域。固定方向快捷键（⌥⌘←/→ 等）始终可用。" = "Drag to reorder; double-click to edit. Record a shortcut per region on the right — pressing it snaps the frontmost window straight to that region. Fixed directional shortcuts (⌥⌘←/→ etc.) are always available.";
+"拖动可更改布局顺序，双击编辑。点击「录制」为区域设快捷键（Esc 取消；点 ✕ 或按 ⌫ 清除），按下直接把前台窗口吸到该区域。固定方向快捷键（⌥⌘←/→ 等）始终可用。" = "Drag to reorder, double-click to edit. Click Record to set a shortcut for a region (Esc cancels; ✕ or ⌫ clears it) — pressing the shortcut snaps the frontmost window straight to that region. Fixed directional shortcuts (⌥⌘←/→ etc.) are always available.";

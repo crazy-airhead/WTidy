@@ -31,10 +31,8 @@ struct TidyLayout: Codable, Equatable {
     var rows: Int
     var regions: [Region]
     var scope: Int   // -1 = 所有屏幕（默认）；≥0 = 指定 CGDirectDisplayID
-    /// 每布局激活快捷键（原版 Activation Shortcut；nil = 未设置）——区域按窗口中心投影选择
-    var activationKeyCode: Int?
-    var activationModifiers: Int?
-    /// 每区域快捷键（regions 下标 → 组合）：按下直接把前台窗口吸到该区域，跳过投影选区
+    /// 每区域快捷键（regions 下标 → 组合）：按下直接把前台窗口吸到该区域，跳过投影选区。
+    /// 布局级快捷键已删（2026-11-13 用户定案：只要区域级）——旧 JSON 里的该字段由 Codable 静默忽略
     var regionHotkeys: [Int: RegionHotkey]
 
     /// 区域快捷键组合（keyCode 用 Carbon 键码；modifiers 为 Carbon 修饰键位掩码）
@@ -44,7 +42,6 @@ struct TidyLayout: Codable, Equatable {
     }
 
     init(id: String, name: String, cols: Int, rows: Int, regions: [Region], scope: Int = -1,
-         activationKeyCode: Int? = nil, activationModifiers: Int? = nil,
          regionHotkeys: [Int: RegionHotkey] = [:]) {
         self.id = id
         self.name = name
@@ -52,12 +49,10 @@ struct TidyLayout: Codable, Equatable {
         self.rows = rows
         self.regions = regions
         self.scope = scope
-        self.activationKeyCode = activationKeyCode
-        self.activationModifiers = activationModifiers
         self.regionHotkeys = regionHotkeys
     }
 
-    /// 兼容旧版持久化 JSON（无 scope/快捷键字段时回退默认）
+    /// 兼容旧版持久化 JSON（无 scope/regionHotkeys 字段时回退默认）
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
@@ -66,8 +61,6 @@ struct TidyLayout: Codable, Equatable {
         rows = try c.decode(Int.self, forKey: .rows)
         regions = try c.decode([Region].self, forKey: .regions)
         scope = try c.decodeIfPresent(Int.self, forKey: .scope) ?? -1
-        activationKeyCode = try c.decodeIfPresent(Int.self, forKey: .activationKeyCode)
-        activationModifiers = try c.decodeIfPresent(Int.self, forKey: .activationModifiers)
         regionHotkeys = try c.decodeIfPresent([Int: RegionHotkey].self, forKey: .regionHotkeys) ?? [:]
     }
 
@@ -146,7 +139,7 @@ enum LayoutStore {
     /// 读取时的规范化：
     /// 1) 内置 id 条目——名称实时重译（JSON 存的是保存当时的语言，切语言后不重译会「英文界面夹中文」）；
     /// 2) 未知 id 但「结构恰好等于某内置 + 名称是历史/当前内置默认名」的陈旧条目——收编为该内置
-    ///    （换 id+名，保留每布局激活快捷键）；收编后与已有 id 冲突则放弃（防重复）。
+    ///    （换 id+名，保留区域快捷键）；收编后与已有 id 冲突则放弃（防重复）。
     ///    名称是自定义的布局永不收编，避免吞掉用户故意改名的自定义布局。
     private static func canonicalized(_ list: [TidyLayout]) -> [TidyLayout] {
         var result: [TidyLayout] = []

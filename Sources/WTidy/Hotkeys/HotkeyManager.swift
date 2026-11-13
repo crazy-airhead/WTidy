@@ -94,26 +94,21 @@ final class HotkeyManager {
     var actionHandler: ((SnapAction) -> Void)?
 
     private var hotKeyRefs: [SnapAction: EventHotKeyRef] = [:]
-    private var layoutHotKeyRefs: [EventHotKeyRef] = []
-    /// 每布局激活快捷键：热键 id → 布局 id（原版每布局 Activation Shortcut）
-    private var layoutShortcutMap: [UInt32: String] = [:]
+    private var customHotKeyRefs: [EventHotKeyRef] = []
     /// 每区域快捷键：热键 id → (布局 id, 区域下标)——直接吸到指定区域，跳过投影选区
     private var regionShortcutMap: [UInt32: (layoutID: String, region: Int)] = [:]
-    var layoutShortcutHandler: ((String) -> Void)?
     var layoutRegionHandler: ((String, Int) -> Void)?
     private var handlerInstalled = false
     private let signature: OSType = 0x57546479 // 'WTdy'
-    private static let layoutHotKeyBase: UInt32 = 3000
     private static let regionHotKeyBase: UInt32 = 6000
 
     static let shared = HotkeyManager()
 
-    /// 冲突查询：该组合是否已被固定动作、布局级或区域级快捷键占用（录制前校验）。
-    /// excluding 指明正在录制的对象：布局级传 (layoutID, nil)，区域级传 (layoutID, region)；
-    /// 区域级与同布局的布局级/其他区域互相冲突，只有精确同位才豁免。
+    /// 冲突查询：该组合是否已被固定动作或其他布局的区域快捷键占用（录制前校验）。
+    /// excluding 指明正在录制的对象 (layoutID, region)，只有精确同位才豁免（重录自己）。
     /// 返回占用者的显示名；无冲突返回 nil。
     func conflictOwner(keyCode: UInt32, modifiers: Int,
-                       excluding layoutID: String?, region: Int? = nil) -> String? {
+                       excluding layoutID: String, region: Int) -> String? {
         for action in SnapAction.allCases where Prefs.hotkeyEnabled(action.rawValue) {
             if action.defaultKeyCode == keyCode && action.defaultModifiers == modifiers {
                 return action.displayName
@@ -121,12 +116,6 @@ final class HotkeyManager {
         }
         for layout in LayoutStore.layouts {
             let isSelf = (layout.id == layoutID)
-            if !isSelf || region != nil {   // 录区域快捷键时，同布局的布局级组合也算占用
-                if let kc = layout.activationKeyCode, kc > 0, kc == Int(keyCode),
-                   layout.activationModifiers == modifiers {
-                    return layout.name
-                }
-            }
             for (idx, hk) in layout.regionHotkeys where hk.keyCode > 0 {
                 if isSelf && region == idx { continue }   // 豁免精确同位
                 if hk.keyCode == Int(keyCode), hk.modifiers == modifiers {
@@ -161,42 +150,26 @@ final class HotkeyManager {
             }
         }
 
-        // 每布局激活快捷键（原版 Activation Shortcut）：应用到前台窗口
-        layoutShortcutMap.removeAll()
+        // 每区域快捷键：直接吸到指定区域
         regionShortcutMap.removeAll()
-        var seq = Self.layoutHotKeyBase
         var regionSeq = Self.regionHotKeyBase
         for layout in LayoutStore.layouts {
-            if let kc = layout.activationKeyCode, kc > 0, let mods = layout.activationModifiers {
-                let hkID = EventHotKeyID(signature: signature, id: seq)
-                var ref: EventHotKeyRef?
-                let err = RegisterEventHotKey(UInt32(kc), UInt32(mods), hkID,
-                                              GetApplicationEventTarget(), 0, &ref)
-                if err == noErr, let ref = ref {
-                    layoutHotKeyRefs.append(ref)
-                    layoutShortcutMap[seq] = layout.id
-                } else {
-                    // 注册失败多半是与本应用外占用的组合冲突——至少留痕，别静默
-                    AppLog.warn("布局快捷键注册失败 \(layout.name) kc=\(kc) err=\(err)")
-                }
-                seq += 1
-            }
-            // 每区域快捷键：直接吸到指定区域
             for (region, hk) in layout.regionHotkeys where hk.keyCode > 0 {
                 let hkID = EventHotKeyID(signature: signature, id: regionSeq)
                 var ref: EventHotKeyRef?
                 let err = RegisterEventHotKey(UInt32(hk.keyCode), UInt32(hk.modifiers), hkID,
                                               GetApplicationEventTarget(), 0, &ref)
                 if err == noErr, let ref = ref {
-                    layoutHotKeyRefs.append(ref)
+                    customHotKeyRefs.append(ref)
                     regionShortcutMap[regionSeq] = (layout.id, region)
                 } else {
+                    // 注册失败多半是与本应用外占用的组合冲突——至少留痕，别静默
                     AppLog.warn("区域快捷键注册失败 \(layout.name) 区域\(region + 1) kc=\(hk.keyCode) err=\(err)")
                 }
                 regionSeq += 1
             }
         }
-        AppLog.info("快捷键已注册 \(hotKeyRefs.count)/\(SnapAction.allCases.count) + 布局快捷键 \(layoutShortcutMap.count) + 区域快捷键 \(regionShortcutMap.count)")
+        AppLog.info("快捷键已注册 \(hotKeyRefs.count)/\(SnapAction.allCases.count) + 区域快捷键 \(regionShortcutMap.count)")
     }
 
     func unregisterAll() {
@@ -204,11 +177,10 @@ final class HotkeyManager {
             UnregisterEventHotKey(ref)
         }
         hotKeyRefs.removeAll()
-        for ref in layoutHotKeyRefs {
+        for ref in customHotKeyRefs {
             UnregisterEventHotKey(ref)
         }
-        layoutHotKeyRefs.removeAll()
-        layoutShortcutMap.removeAll()
+        customHotKeyRefs.removeAll()
         regionShortcutMap.removeAll()
     }
 
@@ -232,13 +204,6 @@ final class HotkeyManager {
                let target = manager.regionShortcutMap[hkID.id] {
                 DispatchQueue.main.async {
                     manager.layoutRegionHandler?(target.layoutID, target.region)
-                }
-                return noErr
-            }
-            if hkID.id >= HotkeyManager.layoutHotKeyBase,
-               let layoutID = manager.layoutShortcutMap[hkID.id] {
-                DispatchQueue.main.async {
-                    manager.layoutShortcutHandler?(layoutID)
                 }
                 return noErr
             }

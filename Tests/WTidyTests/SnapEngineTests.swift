@@ -196,11 +196,10 @@ struct SnapEngineTests {
 
     @Test func staleBuiltinEntriesCanonicalized() {
         // 历史迭代的内置布局残留：id 不在当前内置表、但结构与 wideNarrow 全等、
-        // 名称是历史内置默认名（「左 2/3」）→ 读取时应收编为 wideNarrow（保留激活快捷键）
+        // 名称是历史内置默认名（「左 2/3」）→ 读取时应收编为 wideNarrow（保留区域快捷键）
         var stale = TidyLayout(id: "user-made", name: "左 2/3", cols: 3, rows: 1,
                                regions: [.init(3, 1, 3, 1), .init(1, 1, 2, 1)])   // 区域乱序画出
-        stale.activationKeyCode = 44
-        stale.activationModifiers = 5
+        stale.regionHotkeys[0] = .init(keyCode: 44, modifiers: cmdKey | optionKey)
         // 结构同内置但名称是自定义 → 永不收编（避免吞掉用户故意改名的布局）
         let custom = TidyLayout(id: "custom-x", name: "我的布局", cols: 3, rows: 1,
                                 regions: [.init(1, 1, 2, 1), .init(3, 1, 3, 1)])
@@ -209,8 +208,7 @@ struct SnapEngineTests {
         #expect(list.count == 2)
         #expect(list[0].id == "wideNarrow")
         #expect(list[0].name == L("左 2/3 + 右 1/3"))
-        #expect(list[0].activationKeyCode == 44)
-        #expect(list[0].activationModifiers == 5)
+        #expect(list[0].regionHotkeys[0]?.keyCode == 44)
         #expect(list[1].id == "custom-x")
         #expect(list[1].name == "我的布局")
     }
@@ -372,22 +370,12 @@ struct SnapEngineTests {
     // 注意：必须放在本串行套件内——独立套件会与 SnapEngineTests 并行，其 init() 的
     // LayoutStore.reset() 会与本测试的写入交错（实测并行竞态导致断言失败）
 
-    @Test func layoutShortcutConflictDetected() {
-        var list = LayoutStore.layouts
-        list[0].activationKeyCode = 1    // S（注意：kc>0 是全代码库的「已设置」哨兵，键码 0 不可用）
-        list[0].activationModifiers = cmdKey | optionKey
-        LayoutStore.layouts = list
-
-        let name = LayoutStore.layouts[0].name
-        // 同一组合、不同布局 → 冲突，返回占用者名
-        #expect(HotkeyManager.shared.conflictOwner(keyCode: 1, modifiers: cmdKey | optionKey,
-                                                   excluding: "other-layout") == name)
-        // 排除自身 → 无冲突
-        #expect(HotkeyManager.shared.conflictOwner(keyCode: 1, modifiers: cmdKey | optionKey,
-                                                   excluding: list[0].id) == nil)
-        // 不同组合 → 无冲突
-        #expect(HotkeyManager.shared.conflictOwner(keyCode: 2, modifiers: cmdKey | optionKey,
-                                                   excluding: "other-layout") == nil)
+    @Test func legacyActivationShortcutFieldIgnored() {
+        // 布局级快捷键已删（2026-11-13 用户定案：只要区域级）：
+        // 旧 JSON 里的 activationKeyCode/Modifiers 字段由 Codable 静默忽略，解码不报错
+        let json = #"{"id":"x","name":"旧","cols":2,"rows":1,"regions":[{"x1":1,"y1":1,"x2":1,"y2":1}],"activationKeyCode":44,"activationModifiers":5}"#
+        let decoded = try? JSONDecoder().decode(TidyLayout.self, from: Data(json.utf8))
+        #expect(decoded?.name == "旧")
     }
 
     @Test func regionShortcutConflictSemantics() {
@@ -400,9 +388,6 @@ struct SnapEngineTests {
         // 同布局另一区域录同一组合 → 冲突，占用者名带区域号
         #expect(HotkeyManager.shared.conflictOwner(keyCode: 1, modifiers: cmdKey | optionKey,
                                                    excluding: list[0].id, region: 1) == expected)
-        // 同布局录布局级快捷键撞区域组合 → 也算冲突
-        #expect(HotkeyManager.shared.conflictOwner(keyCode: 1, modifiers: cmdKey | optionKey,
-                                                   excluding: list[0].id, region: nil) == expected)
         // 豁免精确同位（重录自己）
         #expect(HotkeyManager.shared.conflictOwner(keyCode: 1, modifiers: cmdKey | optionKey,
                                                    excluding: list[0].id, region: 0) == nil)
@@ -424,10 +409,10 @@ struct SnapEngineTests {
     @Test func fixedActionConflictDetected() {
         // ⌥⌘← 是固定动作「左半屏」（keyCode 123）
         let owner = HotkeyManager.shared.conflictOwner(keyCode: 123, modifiers: cmdKey | optionKey,
-                                                       excluding: nil)
+                                                       excluding: "any", region: 0)
         #expect(owner == SnapAction.leftHalf.displayName)
         // ⌃⌥⌘← 与固定动作不冲突（修饰键不同）
         #expect(HotkeyManager.shared.conflictOwner(keyCode: 123, modifiers: cmdKey | optionKey | controlKey,
-                                                   excluding: nil) == nil)
+                                                   excluding: "any", region: 0) == nil)
     }
 }

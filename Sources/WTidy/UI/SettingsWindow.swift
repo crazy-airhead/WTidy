@@ -5,8 +5,15 @@ import Carbon.HIToolbox
 /// 非翻转 docView 内容短于视口时会被 NSClipView 底对齐——整页内容下沉、
 /// 顶部大片空白（2026-11-13 用户截图实测；此前几何断言漏算 bounds.origin 误判过一次）。
 /// 设置页与布局编辑器共用。
+/// 入列即关 autoresizing：NSStackView 不会替 arranged 子视图关
+/// `translatesAutoresizingMaskIntoConstraints`，残留的 `width == 单行宽` 必需约束
+/// 会与列宽/限宽约束打架，求解器任意破约（警告行实测渲染 631pt 越过 628 列宽）。
 final class PageStackView: NSStackView {
     override var isFlipped: Bool { true }
+    override func addArrangedSubview(_ view: NSView) {
+        view.translatesAutoresizingMaskIntoConstraints = false
+        super.addArrangedSubview(view)
+    }
 }
 
 /// 设置窗口。
@@ -101,11 +108,12 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     private let layoutTable = LayoutListTableView()
     private let layoutScrollView = NSScrollView()
     private static let layoutDragType = NSPasteboard.PasteboardType("com.allblue.wtidy.layoutrow")
+    /// 行高 108：容四区域 4×24pt 录制钮 + 3×2 间距（96 配 22pt 钮偏矮，用户反馈不协调）
+    static let rowHeight: CGFloat = 108
 
-    /// 说明文字限宽在内容列内换行——英文翻译比中文长，放任固有宽度会溢出页面甚至窗口
+    /// 说明文字限宽在内容列内换行——实现收编到 `Design.Text.capped`（编辑器共用）
     private func columnCapped(_ label: NSTextField, width: CGFloat? = nil) -> NSTextField {
-        label.widthAnchor.constraint(lessThanOrEqualToConstant: width ?? Self.columnWidth).isActive = true
-        return label
+        Design.Text.capped(label, width: width ?? Self.columnWidth)
     }
 
     private func layoutsTab() -> NSTabViewItem {
@@ -113,14 +121,14 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         stack.spacing = Design.Spacing.groupGap
 
         let caption = columnCapped(Design.Text.caption(
-            L("拖动可更改布局顺序，双击编辑；右侧可为每个区域录制快捷键，按下直接把前台窗口吸到该区域。固定方向快捷键（⌥⌘←/→ 等）始终可用。"),
+            L("拖动可更改布局顺序，双击编辑。点击「录制」为区域设快捷键（Esc 取消；点 ✕ 或按 ⌫ 清除），按下直接把前台窗口吸到该区域。固定方向快捷键（⌥⌘←/→ 等）始终可用。"),
             wrapWidth: Self.columnWidth))
         stack.addArrangedSubview(caption)
         stack.setCustomSpacing(10, after: caption)
 
         // 列表
         layoutTable.headerView = nil
-        layoutTable.rowHeight = 96
+        layoutTable.rowHeight = Self.rowHeight
         layoutTable.dataSource = self
         layoutTable.delegate = self
         layoutTable.target = self
@@ -468,10 +476,13 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         // 初始尺寸取 tab 内容区（NSTabView 会再拉伸对齐）；居中靠约束，不靠 frame
         let content = NSView(frame: NSRect(x: 0, y: 0, width: 696, height: 698))
 
-        let iconConfig = NSImage.SymbolConfiguration(pointSize: 48, weight: .light)
-        let icon = NSImageView(image: NSImage(systemSymbolName: "rectangle.split.2x2", accessibilityDescription: nil)?
-            .withSymbolConfiguration(iconConfig) ?? NSImage())
-        icon.contentTintColor = .controlAccentColor
+        // 品牌图标（读 AppIcon.icns，与正式 Logo 同源）
+        let icon = NSImageView(image: NSApp.applicationIconImage)
+        icon.imageScaling = .scaleProportionallyUpOrDown
+        NSLayoutConstraint.activate([
+            icon.widthAnchor.constraint(equalToConstant: 72),
+            icon.heightAnchor.constraint(equalToConstant: 72),
+        ])
 
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
         let title = NSTextField(labelWithString: "WTidy \(version)")
@@ -668,11 +679,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
 
     // MARK: - 小工具
 
-    /// 录制快捷键的统一校验：与固定动作/其他布局冲突时弹窗并拒绝。
+    /// 录制快捷键的统一校验：与固定动作/其他区域冲突时弹窗并拒绝。
     /// 返回 true 表示可采用该组合。
     @discardableResult
     static func validateShortcut(keyCode: UInt32, modifiers: Int,
-                                 excluding layoutID: String, region: Int? = nil) -> Bool {
+                                 excluding layoutID: String, region: Int) -> Bool {
         guard let owner = HotkeyManager.shared.conflictOwner(keyCode: keyCode,
                                                              modifiers: modifiers,
                                                              excluding: layoutID,
@@ -739,24 +750,37 @@ final class ScreenPositionPreviewView: NSView {
 // MARK: - 全局快捷键录制按钮（macOS 快捷键设置惯例）
 
 /// 点击录制：录制态高亮（强调色描边）；Esc 取消；Delete/⌦ 清除（macOS 惯例）；
-/// 无修饰键的按键不静默吞掉，标题即时提示。
+/// 无修饰键的按键不静默吞掉，标题即时短提示。
+/// 标题一律由状态派生（syncTitle）——旧版用 previousTitle 回填，而视图离开层级
+/// （reloadData 回收行视图、栈重排）也会触发 stopRecording，把从未录制过的按钮
+/// 标题抹成空串，出现「空白灰钮」（2026-11-13 用户截图定位）。
 final class HotkeyRecorderButton: NSButton {
     var onRecord: ((UInt32, Int) -> Void)?
     var onClear: (() -> Void)?
+    /// 已录制组合的可读文本；空 = 未录制（占位「录制」）。reload 时由行构建方更新
+    var displayText = "" { didSet { syncTitle() } }
     private var monitor: Any?
-    private var previousTitle = ""
+    private var recording = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         bezelStyle = .rounded
     }
 
-    convenience init(title: String) {
-        self.init(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
-        self.title = title
+    convenience init(displayText: String = "") {
+        self.init(frame: NSRect(x: 0, y: 0, width: 108, height: 22))
+        // init 阶段对 displayText 赋值不触发 didSet（Swift 属性观察者不跑于初始化期，实测），
+        // 必须显式同步，否则标题一直是 NSButton 默认的 "Button"
+        self.displayText = displayText
+        syncTitle()
     }
 
     required init?(coder: NSCoder) { fatalError(L("init(coder:) 未实现")) }
+
+    private func syncTitle() {
+        title = recording ? L("输入快捷键…")
+            : (displayText.isEmpty ? L("录制") : displayText)
+    }
 
     override func mouseDown(with event: NSEvent) {
         startRecording()
@@ -764,23 +788,23 @@ final class HotkeyRecorderButton: NSButton {
 
     /// 窗口关闭/按钮离树时务必收掉 monitor，否则局部键盘监听泄漏
     override func viewDidMoveToWindow() {
-        if window == nil { stopRecording() }
+        if window == nil { abortRecording() }
     }
 
     private func startRecording() {
         guard monitor == nil else { return }
-        previousTitle = title
-        title = L("输入快捷键…")
+        recording = true
+        syncTitle()
         bezelColor = .controlAccentColor   // 录制态视觉高亮
 
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self = self else { return event }
             switch event.keyCode {
             case 53:   // Esc 取消
-                self.stopRecording()
+                self.abortRecording()
                 return nil
             case 51, 117:   // Delete / ⌦：清除已录快捷键
-                self.stopRecording()
+                self.abortRecording()
                 self.onClear?()
                 return nil
             default:
@@ -792,21 +816,64 @@ final class HotkeyRecorderButton: NSButton {
             if event.modifierFlags.contains(.control) { carbon |= controlKey }
             if event.modifierFlags.contains(.shift) { carbon |= shiftKey }
             guard carbon != 0 else {
-                self.title = L("需含修饰键（⌃⌥⌘⇧）")   // 提示而非静默吞掉
+                self.title = L("需修饰键")   // 短提示（108pt 宽内放得下），不静默吞掉
                 return nil
             }
 
-            self.stopRecording()
+            self.abortRecording()
             self.onRecord?(UInt32(event.keyCode), carbon)
             return nil
         }
     }
 
-    private func stopRecording() {
+    /// 结束录制态并恢复派生标题（Esc / 录制成功 / 离开层级共用）
+    private func abortRecording() {
         monitor.map { NSEvent.removeMonitor($0) }
         monitor = nil
+        recording = false
         bezelColor = nil
-        title = previousTitle
+        syncTitle()
+    }
+}
+
+/// 已录制快捷键行尾的 ✕ 清除钮：只有录过才出现（NSStackView 折叠隐藏视图不占位），
+/// 不用「录制后按 ⌫」这种不可发现的隐藏手势当唯一出口
+final class HotkeyClearButton: NSButton {
+    var onClear: (() -> Void)?
+    private var hoverTracking: NSTrackingArea?
+
+    init() {
+        super.init(frame: NSRect(x: 0, y: 0, width: 16, height: 16))
+        let icon = NSImage(systemSymbolName: "xmark.circle.fill",
+                           accessibilityDescription: L("清除快捷键"))?
+            .withSymbolConfiguration(.init(pointSize: 12, weight: .regular)) ?? NSImage()
+        self.image = icon
+        isBordered = false
+        contentTintColor = .secondaryLabelColor
+        toolTip = L("清除该快捷键")
+        setAccessibilityLabel(L("清除快捷键"))
+    }
+
+    required init?(coder: NSCoder) { fatalError(L("init(coder:) 未实现")) }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverTracking { removeTrackingArea(hoverTracking) }
+        let area = NSTrackingArea(rect: bounds,
+                                  options: [.mouseEnteredAndExited, .activeInActiveApp],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        hoverTracking = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        if isEnabled { contentTintColor = .controlAccentColor }
+    }
+    override func mouseExited(with event: NSEvent) { contentTintColor = .secondaryLabelColor }
+
+    override func mouseDown(with event: NSEvent) {
+        guard isEnabled else { return }   // 未录制淡出占位时不可点
+        onClear?()
     }
 }
 
@@ -983,6 +1050,10 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
     private let isNew: Bool
     private let onCommit: (TidyLayout) -> Void
 
+    /// 内容列宽 = 窗口 560 − pageInsets 左右 48。说明文字限宽、画布、取消/保存行
+    /// 按它对齐——与设置页「元素与内容列同宽」同一硬规则（设置页 columnWidth=628 同理）。
+    private static let columnWidth: CGFloat = 512
+
     /// 关键：编辑器控制器必须静态持有到窗口关闭。
     /// 此前 present() 里是局部变量，方法返回后控制器即被释放——
     /// 窗口还显示着（NSWindow 由 AppKit 窗口列表持有），但所有控件的
@@ -1080,14 +1151,19 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
 
         // 屏幕布局画布
         stack.addArrangedSubview(Design.Text.sectionTitle(L("屏幕布局")))
-        stack.addArrangedSubview(Design.Text.caption(L("在网格上「按住拖动」画出区域；点住已画区域拖动可移动；画错点「删除所选区域」。")))
+        // 说明文字必须限宽在内容列内：英文翻译比中文长（~557pt > 512），放任固有宽度
+        // 会满窗溢出，还让约束求解器连带把取消/保存行挤离列缘（2026-11-13 用户截图实测）
+        stack.addArrangedSubview(Design.Text.capped(
+            Design.Text.caption(L("在网格上「按住拖动」画出区域；点住已画区域拖动可移动；画错点「删除所选区域」。"),
+                                wrapWidth: Self.columnWidth),
+            width: Self.columnWidth))
         canvas.wantsLayer = true
         canvas.layer?.borderColor = NSColor.separatorColor.cgColor
         canvas.layer?.borderWidth = 1
         canvas.layer?.cornerRadius = Design.Radius.insetFrame
         canvas.translatesAutoresizingMaskIntoConstraints = false
-        canvas.widthAnchor.constraint(equalToConstant: 480).isActive = true
-        canvas.heightAnchor.constraint(equalToConstant: 300).isActive = true
+        canvas.widthAnchor.constraint(equalToConstant: Self.columnWidth).isActive = true
+        canvas.heightAnchor.constraint(equalToConstant: 320).isActive = true   // 512×320 = 16:10，与真实屏等比
         canvas.onChanged = { [weak self] in
             self?.syncWorkingFromFields()
         }
@@ -1097,14 +1173,14 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
         deleteRegionButton.action = #selector(deleteRegionClicked)
         let canvasRow = NSStackView(views: [deleteRegionButton, NSView()])
         canvasRow.orientation = .horizontal
-        canvasRow.spacing = 8
+        canvasRow.spacing = Design.Spacing.groupGap
         canvasRow.translatesAutoresizingMaskIntoConstraints = false
-        canvasRow.widthAnchor.constraint(equalToConstant: 480).isActive = true
+        canvasRow.widthAnchor.constraint(equalToConstant: Self.columnWidth).isActive = true
         canvasRow.arrangedSubviews[1].setContentHuggingPriority(.defaultLow, for: .horizontal)
         stack.addArrangedSubview(canvas)
-        stack.setCustomSpacing(4, after: canvas)
+        stack.setCustomSpacing(Design.Spacing.groupGap, after: canvas)
         stack.addArrangedSubview(canvasRow)
-        stack.setCustomSpacing(12, after: canvasRow)
+        stack.setCustomSpacing(Design.Spacing.stackGap, after: canvasRow)
 
         // 预览
         stack.addArrangedSubview(Design.Text.sectionTitle(L("预览")))
@@ -1113,7 +1189,7 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
         previewView.layer?.borderWidth = 1
         previewView.layer?.cornerRadius = Design.Radius.insetFrame
         stack.addArrangedSubview(previewView)
-        stack.setCustomSpacing(14, after: previewView)
+        stack.setCustomSpacing(Design.Spacing.stackGap, after: previewView)
 
         // 取消 / 保存
         let cancelButton = NSButton(title: L("取消"), target: self, action: #selector(cancelClicked))
@@ -1123,13 +1199,13 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
         let flexible = NSView()
         let buttons = NSStackView(views: [cancelButton, flexible, saveButton])
         buttons.orientation = .horizontal
-        buttons.spacing = 10
+        buttons.spacing = Design.Spacing.groupGap
         buttons.translatesAutoresizingMaskIntoConstraints = false
-        buttons.widthAnchor.constraint(equalToConstant: 512).isActive = true   // 编辑器内容列宽（560 − pageInsets 48），取消/保存行右缘与列对齐
+        buttons.widthAnchor.constraint(equalToConstant: Self.columnWidth).isActive = true   // 取消/保存行右缘与内容列对齐
         flexible.setContentHuggingPriority(.defaultLow, for: .horizontal)
         stack.addArrangedSubview(buttons)
 
-        // 内容超过窗口高度（多区域布局的区域快捷键行）时滚动，与设置页同款模式
+        // 内容超过窗口高度（说明文字换行成两行等）时滚动，与设置页同款模式
         let scroll = NSScrollView()
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
@@ -1279,12 +1355,12 @@ extension SettingsWindowController {
         let cell = NSView()
 
         let thumb = NSImageView(image: Self.thumbnail(for: layout, size: NSSize(width: 150, height: 84)))
-        thumb.frame = NSRect(x: 12, y: 6, width: 150, height: 84)
+        thumb.frame = NSRect(x: 12, y: 12, width: 150, height: 84)
         cell.addSubview(thumb)
 
         let name = NSTextField(labelWithString: layout.name)
         name.font = Design.Font.listTitle
-        name.frame = NSRect(x: 178, y: 64, width: 250, height: 20)
+        name.frame = NSRect(x: 178, y: 76, width: 250, height: 20)
         cell.addSubview(name)
 
         let desc: String
@@ -1298,90 +1374,106 @@ extension SettingsWindowController {
         let descLabel = NSTextField(labelWithString: desc)
         descLabel.font = Design.Font.body
         descLabel.textColor = .secondaryLabelColor
-        descLabel.frame = NSRect(x: 178, y: 40, width: 250, height: 16)
+        descLabel.frame = NSRect(x: 178, y: 52, width: 250, height: 16)
         cell.addSubview(descLabel)
 
         let scopeLabel = NSTextField(labelWithString: layout.scope == -1 ? L("所有屏幕") : L("仅指定显示器"))
         scopeLabel.font = Design.Font.hint
         scopeLabel.textColor = .tertiaryLabelColor
-        scopeLabel.frame = NSRect(x: 178, y: 20, width: 300, height: 14)
+        scopeLabel.frame = NSRect(x: 178, y: 32, width: 300, height: 14)
         cell.addSubview(scopeLabel)
 
-        // 快捷键统一在行内设置：每区域一个录制钮（按下直接吸到该区域，跳过投影选区），
-        // 纵列靠右、垂直居中；旧版布局级快捷键（若已设）保留在列顶，可改可清
+        // 快捷键统一在行内设置：每区域一行「区域 N」角标 + 录制钮 + ✕ 清除钮；
+        // 纵列靠右、垂直居中。✕ 未录制时淡出但**占位**（不用 isHidden 折叠——折叠会让
+        // 已录制行的列比未录制行宽 22pt，跨行不对齐，2026-11-13 用户截图）。
+        // 布局级快捷键已删（2026-11-13 用户定案：只要区域级）
         let recColumn = NSStackView()
         recColumn.orientation = .vertical
         recColumn.spacing = 2
         recColumn.alignment = .trailing
-        if let kc = layout.activationKeyCode, kc > 0, let mods = layout.activationModifiers {
-            let rec = makeShortcutRecorder(layoutID: layout.id, region: nil,
-                                           current: Self.hotkeyDisplay(keyCode: UInt32(kc), modifiers: mods))
-            let tag = Design.Text.caption(L("布局"))
-            let row = NSStackView(views: [tag, rec])
-            row.orientation = .horizontal
-            row.spacing = 6
-            recColumn.addArrangedSubview(row)
-        }
         for i in 0..<layout.regions.count {
             let current = layout.regionHotkeys[i].flatMap {
                 $0.keyCode > 0 ? Self.hotkeyDisplay(keyCode: UInt32($0.keyCode), modifiers: $0.modifiers) : nil
             }
             let rec = makeShortcutRecorder(layoutID: layout.id, region: i, current: current)
+            rec.translatesAutoresizingMaskIntoConstraints = false
             rec.widthAnchor.constraint(equalToConstant: 108).isActive = true
-            rec.heightAnchor.constraint(equalToConstant: 20).isActive = true
+            rec.heightAnchor.constraint(equalToConstant: 24).isActive = true
+            let clear = makeClearButton(layoutID: layout.id, region: i)
+            setClearActive(clear, active: current != nil)
+            var rowViews: [NSView] = []
             if layout.regions.count > 1 {
+                // 角标钉宽 44：行几何完全恒定，录制钮不随「区域 N」文字度量抖动（en "Region 12" ≈36pt 内）
                 let tag = Design.Text.caption(LF("区域 %d", i + 1))
-                let row = NSStackView(views: [tag, rec])
-                row.orientation = .horizontal
-                row.spacing = 6
-                recColumn.addArrangedSubview(row)
-            } else {
-                recColumn.addArrangedSubview(rec)
+                tag.widthAnchor.constraint(equalToConstant: 44).isActive = true
+                rowViews.append(tag)
             }
+            rowViews.append(contentsOf: [rec, clear])
+            let row = NSStackView(views: rowViews)
+            row.orientation = .horizontal
+            row.spacing = 6
+            recColumn.addArrangedSubview(row)
         }
         let colSize = recColumn.fittingSize
-        recColumn.frame = NSRect(x: Self.columnWidth - 12 - colSize.width,
-                                 y: (96 - colSize.height) / 2,
+        // 右缘留 16pt：12pt 会贴着 overlay 滚动条（✕ 与滚动条零间隙，同截图反馈）
+        recColumn.frame = NSRect(x: Self.columnWidth - 16 - colSize.width,
+                                 y: (Self.rowHeight - colSize.height) / 2,
                                  width: colSize.width, height: colSize.height)
         cell.addSubview(recColumn)
 
         return cell
     }
 
-    /// 列表行的快捷键录制钮：region=nil 为旧版布局级（按窗口位置投影选区），
-    /// region=i 直接吸到区域 i。点击即录、Delete 清除、冲突弹窗拒绝；
+    /// 列表行的区域快捷键录制钮：点击即录、Esc 取消、⌫ 清除（另有行尾 ✕ 直除）、冲突弹窗拒绝；
     /// 写回 LayoutStore 会广播 prefsChanged，HotkeyManager 自动重注册。
-    private func makeShortcutRecorder(layoutID: String, region: Int?, current: String?) -> HotkeyRecorderButton {
-        let rec = HotkeyRecorderButton(title: current ?? L("录制"))
+    private func makeShortcutRecorder(layoutID: String, region: Int, current: String?) -> HotkeyRecorderButton {
+        let rec = HotkeyRecorderButton(displayText: current ?? "")
         rec.controlSize = .small
         rec.font = Design.Font.monoBadge
+        rec.toolTip = L("点击录制，Esc 取消")
         rec.onRecord = { [weak self] keyCode, modifiers in
             guard Self.validateShortcut(keyCode: keyCode, modifiers: modifiers,
                                         excluding: layoutID, region: region) else { return }
             var list = LayoutStore.layouts
             guard let idx = list.firstIndex(where: { $0.id == layoutID }) else { return }
-            if let region {
-                list[idx].regionHotkeys[region] = .init(keyCode: Int(keyCode), modifiers: modifiers)
-            } else {
-                list[idx].activationKeyCode = Int(keyCode)
-                list[idx].activationModifiers = modifiers
-            }
+            list[idx].regionHotkeys[region] = .init(keyCode: Int(keyCode), modifiers: modifiers)
             LayoutStore.layouts = list
             self?.layoutTable.reloadData()
         }
         rec.onClear = { [weak self] in
             var list = LayoutStore.layouts
             guard let idx = list.firstIndex(where: { $0.id == layoutID }) else { return }
-            if let region {
-                list[idx].regionHotkeys[region] = nil
-            } else {
-                list[idx].activationKeyCode = nil
-                list[idx].activationModifiers = nil
-            }
+            list[idx].regionHotkeys[region] = nil
             LayoutStore.layouts = list
             self?.layoutTable.reloadData()
         }
         return rec
+    }
+
+    /// 已录制快捷键行尾的 ✕ 清除钮（与录制钮 onClear 同一写回路径）。
+    /// 必须钉死 16×16 并关 translates：不钉时 NSStackView fittingSize 只按图像
+    /// intrinsic 计入 ~3pt，列宽算错 → ✕ 离按钮 13pt 悬空（2026-11-13 用户截图）
+    private func makeClearButton(layoutID: String, region: Int) -> HotkeyClearButton {
+        let clear = HotkeyClearButton()
+        clear.translatesAutoresizingMaskIntoConstraints = false
+        clear.widthAnchor.constraint(equalToConstant: 16).isActive = true
+        clear.heightAnchor.constraint(equalToConstant: 16).isActive = true
+        clear.onClear = { [weak self] in
+            var list = LayoutStore.layouts
+            guard let idx = list.firstIndex(where: { $0.id == layoutID }) else { return }
+            list[idx].regionHotkeys[region] = nil
+            LayoutStore.layouts = list
+            self?.layoutTable.reloadData()
+        }
+        return clear
+    }
+
+    /// ✕ 未录制时淡出但保持占位（保证各行录制钮同位对齐）；禁点、无障碍隐藏
+    private func setClearActive(_ clear: HotkeyClearButton, active: Bool) {
+        clear.alphaValue = active ? 1 : 0
+        clear.isEnabled = active
+        clear.toolTip = active ? L("清除该快捷键") : nil
+        clear.setAccessibilityHidden(!active)
     }
 
     // MARK: 拖拽排序

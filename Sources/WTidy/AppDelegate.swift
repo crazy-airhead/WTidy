@@ -52,9 +52,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         HotkeyManager.shared.actionHandler = { [weak self] action in
             self?.overlay.snapFrontmost(action)
         }
-        HotkeyManager.shared.layoutShortcutHandler = { [weak self] layoutID in
-            _ = self?.overlay.applyLayoutByID(layoutID)
-        }
         // 区域快捷键：跳过投影选区，直接吸到指定区域
         HotkeyManager.shared.layoutRegionHandler = { [weak self] layoutID, region in
             guard let layout = LayoutStore.layout(id: layoutID) else { return }
