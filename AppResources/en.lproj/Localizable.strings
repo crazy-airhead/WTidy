@@ -36,13 +36,13 @@
 "打开日志" = "Open Log";
 "打开系统设置授权" = "Authorize in System Settings";
 "点此打开系统设置授权" = "Click to open System Settings and authorize";
-"点击录制；Esc 取消，Delete 清除；需含修饰键（⌃⌥⌘⇧）。录制后按此快捷键把该布局应用到最前面的窗口。" = "Click to record; Esc cancels, Delete clears; a modifier key (⌃⌥⌘⇧) is required. The shortcut applies this layout to the frontmost window.";
 "输入快捷键…" = "Type a shortcut…";
 "需含修饰键（⌃⌥⌘⇧）" = "Requires a modifier key (⌃⌥⌘⇧)";
 "快捷键冲突" = "Shortcut Conflict";
 "该组合已被「%@」占用，请换一个。" = "This combination is already used by \"%@\".";
 "好" = "OK";
 "录制" = "Record";
+"区域 %d" = "Region %d";
 "定位" = "Positioning";
 "辅助功能权限" = "Accessibility Permission";
 "关于" = "About";
@@ -52,7 +52,6 @@
 "恢复内置布局" = "Restore Built-in Layouts";
 "恢复所有窗口位置" = "Restore All Window Positions";
 "恢复位置" = "Restore Position";
-"激活快捷键" = "Activation Shortcut";
 "甲 / 乙" = "A / B";
 "仅指定显示器" = "Selected display only";
 "居中" = "Centre";
@@ -93,7 +92,6 @@
 "网格密度" = "Grid Density";
 "（网格越细，区域越精确）" = "(a finer grid gives more precise regions)";
 "未命名" = "Untitled";
-"未设置（点击录制）" = "Not set (click to record)";
 "（无布局，请在设置的「布局」页添加）" = "(No layouts — add some on the Layouts tab in Settings)";
 "下半屏" = "Bottom Half";
 "显示菜单栏状态图标" = "Show menu bar status icon";
@@ -151,4 +149,4 @@
 "%d × %d 网格" = "%d × %d grid";
 "拖拽任意窗口，屏幕顶部会出现布局条；悬停选择布局后松手即吸附。\n快捷键示例：⌥⌘← 左半屏，⌃⌥⌘F 最大化，⌃⌥⌘Z 恢复位置。" = "Drag any window — a layout bar appears at the top of the screen;\nhover to pick a layout and release to snap.\nHotkey examples: ⌥⌘← left half, ⌃⌥⌘F maximize, ⌃⌥⌘Z restore position.";
 "arm64 原生 · 看门狗自愈 · 现代登录项" = "arm64 native · self-healing watchdog · modern login item";
-"拖动可更改布局顺序，双击编辑；双击后可在编辑器里为布局录制专属激活快捷键。固定方向快捷键（⌥⌘←/→ 等）始终可用。" = "Drag to reorder layouts; double-click to edit and record a per-layout activation shortcut. Fixed directional shortcuts (⌥⌘←/→ etc.) are always available.";
+"拖动可更改布局顺序，双击编辑；右侧可为每个区域录制快捷键，按下直接把前台窗口吸到该区域。固定方向快捷键（⌥⌘←/→ 等）始终可用。" = "Drag to reorder; double-click to edit. Record a shortcut per region on the right — pressing it snaps the frontmost window straight to that region. Fixed directional shortcuts (⌥⌘←/→ etc.) are always available.";

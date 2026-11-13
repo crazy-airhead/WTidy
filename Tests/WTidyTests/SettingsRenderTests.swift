@@ -136,6 +136,54 @@ struct SettingsRenderTests {
         }
     }
 
+    /// 布局行快捷键纵列防回归：每区域一个录制钮，纵列在行内右对齐、
+    /// 垂直居中且不压左侧文字区（文字列 x=178 宽 250，列 minX 须 > 428）。
+    @Test func layoutRowRecorderColumn() {
+        _ = NSApplication.shared
+        let controller = SettingsWindowController.shared
+        controller.present()
+        guard let win = NSApp.windows.first(where: { $0.title == "WTidy 偏好设置" }),
+              let tab = win.contentView?.subviews.compactMap({ $0 as? NSTabView }).first,
+              let scroll = tab.tabViewItems[0].view as? NSScrollView else {
+            Issue.record("布局页结构异常")
+            return
+        }
+        tab.selectTabViewItem(at: 0)
+        win.contentView?.layoutSubtreeIfNeeded()
+        guard let pageStack = scroll.documentView as? NSStackView,
+              let listScroll = pageStack.arrangedSubviews.compactMap({ $0 as? NSScrollView }).first,
+              let table = listScroll.documentView as? NSTableView else {
+            Issue.record("布局页列表缺失")
+            return
+        }
+        table.layoutSubtreeIfNeeded()
+
+        func collectButtons(_ v: NSView) -> [NSButton] {
+            ([v] as [NSView]).flatMap { $0.subviews }.reduce(into: [v as? NSButton].compactMap { $0 }) {
+                $0.append(contentsOf: collectButtons($1))
+            }
+        }
+
+        // 多区域布局（quarters，4 区域）应有 4 个录制钮
+        guard let qRow = LayoutStore.layouts.firstIndex(where: { $0.id == "quarters" }),
+              let rowView = table.view(atColumn: 0, row: qRow, makeIfNecessary: true) else {
+            Issue.record("quarters 行视图缺失")
+            return
+        }
+        rowView.layoutSubtreeIfNeeded()
+        let recorders = collectButtons(rowView)
+        #expect(recorders.count == 4, "quarters 行应有 4 个区域录制钮，实际 \(recorders.count)")
+
+        // 纵列右对齐且不压文字区
+        if let column = rowView.subviews.first(where: { $0 is NSStackView }) {
+            #expect(column.frame.minX > 428, "录制钮纵列不应压文字区（minX 须 > 428），实际 \(column.frame.minX)")
+            #expect(column.frame.maxX <= 617, "录制钮纵列不应超出内容列（628−12 边距），实际 maxX \(column.frame.maxX)")
+            #expect(column.frame.height <= 96, "录制钮纵列不应超出行高 96，实际 \(column.frame.height)")
+        } else {
+            Issue.record("行内缺少录制钮纵列")
+        }
+    }
+
     /// 区域块内缩必须随图标尺寸收缩（预览即真实）：
     /// 以定位页预览同级的 60×34 小图标渲染「最大化」布局，区域块纵向覆盖应 ≥ 70%。
     /// 背景：内缩曾是绝对 6pt，小图标（预览约 28pt 高）上吃掉 40%+ 高度，

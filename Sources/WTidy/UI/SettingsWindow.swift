@@ -1,6 +1,14 @@
 import AppKit
 import Carbon.HIToolbox
 
+/// 页面栈文档视图必须翻转：本环境下 NSStackView 实测 isFlipped=false，
+/// 非翻转 docView 内容短于视口时会被 NSClipView 底对齐——整页内容下沉、
+/// 顶部大片空白（2026-11-13 用户截图实测；此前几何断言漏算 bounds.origin 误判过一次）。
+/// 设置页与布局编辑器共用。
+final class PageStackView: NSStackView {
+    override var isFlipped: Bool { true }
+}
+
 /// 设置窗口。
 /// 故意不用 Auto Layout 撑尺寸：NSTabView 直接 autoresizing 贴满窗口内容区，
 /// 各 tab 页内部只用「单边/居中」约束（和引导窗口同款、已验证可靠的模式）。
@@ -105,7 +113,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         stack.spacing = Design.Spacing.groupGap
 
         let caption = columnCapped(Design.Text.caption(
-            L("拖动可更改布局顺序，双击编辑；双击后可在编辑器里为布局录制专属激活快捷键。固定方向快捷键（⌥⌘←/→ 等）始终可用。"),
+            L("拖动可更改布局顺序，双击编辑；右侧可为每个区域录制快捷键，按下直接把前台窗口吸到该区域。固定方向快捷键（⌥⌘←/→ 等）始终可用。"),
             wrapWidth: Self.columnWidth))
         stack.addArrangedSubview(caption)
         stack.setCustomSpacing(10, after: caption)
@@ -226,13 +234,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
             LayoutStore.layouts = list
             self?.reloadLayouts()
         }
-    }
-
-    /// 页面栈文档视图必须翻转：本环境下 NSStackView 实测 isFlipped=false，
-    /// 非翻转 docView 内容短于视口时会被 NSClipView 底对齐——整页内容下沉、
-    /// 顶部大片空白（2026-11-13 用户截图实测；此前几何断言漏算 bounds.origin 误判过一次）。
-    private final class PageStackView: NSStackView {
-        override var isFlipped: Bool { true }
     }
 
     /// 页面容器：滚动视图包裹垂直布局栈（文档视图翻转：短内容顶对齐，长内容滚动）。
@@ -670,10 +671,12 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     /// 录制快捷键的统一校验：与固定动作/其他布局冲突时弹窗并拒绝。
     /// 返回 true 表示可采用该组合。
     @discardableResult
-    static func validateShortcut(keyCode: UInt32, modifiers: Int, excluding layoutID: String) -> Bool {
+    static func validateShortcut(keyCode: UInt32, modifiers: Int,
+                                 excluding layoutID: String, region: Int? = nil) -> Bool {
         guard let owner = HotkeyManager.shared.conflictOwner(keyCode: keyCode,
                                                              modifiers: modifiers,
-                                                             excluding: layoutID) else { return true }
+                                                             excluding: layoutID,
+                                                             region: region) else { return true }
         let alert = NSAlert()
         alert.messageText = L("快捷键冲突")
         alert.informativeText = LF("该组合已被「%@」占用，请换一个。", owner)
@@ -973,7 +976,6 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
     private let colsField: NSTextField
     private let rowsField: NSTextField
     private let scopePopUp = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 220, height: 26), pullsDown: false)
-    private let shortcutRecorder = HotkeyRecorderButton(title: L("未设置（点击录制）"))
     private let canvas: LayoutGridCanvasView
     private let previewView: NSImageView
     private let deleteRegionButton = NSButton(title: L("删除所选区域"), target: nil, action: nil)
@@ -1024,7 +1026,7 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
     // MARK: UI 构建
 
     private func buildUI() {
-        let stack = NSStackView()
+        let stack = PageStackView()   // 滚动容器文档视图必须翻转（短内容顶对齐）
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = Design.Spacing.stackGap
@@ -1046,27 +1048,7 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
         nameField.delegate = self
         stack.addArrangedSubview(fieldRow([label(L("名称")), nameField]))
 
-        // 激活快捷键（原版 Activation Shortcut：应用到前台窗口）
-        // 回显已录组合；录制走统一冲突校验；Delete 清除
-        if let kc = working.activationKeyCode, kc > 0, let mods = working.activationModifiers {
-            shortcutRecorder.title = SettingsWindowController.hotkeyDisplay(keyCode: UInt32(kc), modifiers: mods)
-        }
-        shortcutRecorder.onRecord = { [weak self] keyCode, modifiers in
-            guard let self else { return }
-            guard SettingsWindowController.validateShortcut(keyCode: keyCode, modifiers: modifiers,
-                                                            excluding: self.working.id) else { return }
-            self.working.activationKeyCode = Int(keyCode)
-            self.working.activationModifiers = modifiers
-            self.shortcutRecorder.title = SettingsWindowController.hotkeyDisplay(keyCode: keyCode, modifiers: modifiers)
-        }
-        shortcutRecorder.onClear = { [weak self] in
-            self?.working.activationKeyCode = nil
-            self?.working.activationModifiers = nil
-            self?.shortcutRecorder.title = L("未设置（点击录制）")
-        }
-        shortcutRecorder.widthAnchor.constraint(equalToConstant: 380).isActive = true
-        stack.addArrangedSubview(fieldRow([label(L("激活快捷键")), shortcutRecorder]))
-        stack.addArrangedSubview(Design.Text.caption(L("点击录制；Esc 取消，Delete 清除；需含修饰键（⌃⌥⌘⇧）。录制后按此快捷键把该布局应用到最前面的窗口。"), wrapWidth: 480))
+        // 快捷键不在编辑器设：统一在布局列表行内按区域录制（冲突一目了然）
 
         // 作用域
         scopePopUp.addItem(withTitle: L("所有屏幕"))
@@ -1147,15 +1129,18 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
         flexible.setContentHuggingPriority(.defaultLow, for: .horizontal)
         stack.addArrangedSubview(buttons)
 
-        let content = NSView()
-        content.addSubview(stack)
+        // 内容超过窗口高度（多区域布局的区域快捷键行）时滚动，与设置页同款模式
+        let scroll = NSScrollView()
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.drawsBackground = false
+        scroll.documentView = stack
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: content.topAnchor),
-            stack.leadingAnchor.constraint(equalTo: content.leadingAnchor),
-            stack.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor),
-            stack.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor),
+            stack.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
+            stack.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
+            stack.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
         ])
-        window.contentView = content
+        window.contentView = scroll
     }
 
     // MARK: 状态同步
@@ -1172,6 +1157,8 @@ final class LayoutEditorWindowController: NSObject, NSWindowDelegate, NSTextFiel
         }
         working.scope = (scopePopUp.selectedItem?.representedObject as? Int) ?? working.scope
         working.regions = canvas.regions
+        // 区域被删后，越界的区域快捷键随之失效
+        working.regionHotkeys = working.regionHotkeys.filter { $0.key < working.regions.count }
         previewView.image = SettingsWindowController.thumbnail(for: working, size: NSSize(width: 200, height: 112))
     }
 
@@ -1297,7 +1284,7 @@ extension SettingsWindowController {
 
         let name = NSTextField(labelWithString: layout.name)
         name.font = Design.Font.listTitle
-        name.frame = NSRect(x: 178, y: 64, width: 400, height: 20)
+        name.frame = NSRect(x: 178, y: 64, width: 250, height: 20)
         cell.addSubview(name)
 
         let desc: String
@@ -1311,7 +1298,7 @@ extension SettingsWindowController {
         let descLabel = NSTextField(labelWithString: desc)
         descLabel.font = Design.Font.body
         descLabel.textColor = .secondaryLabelColor
-        descLabel.frame = NSRect(x: 178, y: 40, width: 440, height: 16)
+        descLabel.frame = NSRect(x: 178, y: 40, width: 250, height: 16)
         cell.addSubview(descLabel)
 
         let scopeLabel = NSTextField(labelWithString: layout.scope == -1 ? L("所有屏幕") : L("仅指定显示器"))
@@ -1320,35 +1307,81 @@ extension SettingsWindowController {
         scopeLabel.frame = NSRect(x: 178, y: 20, width: 300, height: 14)
         cell.addSubview(scopeLabel)
 
-        // 快捷键：点击即录（不必进编辑器）；录制中 Delete 清除；冲突弹窗拒绝
-        let recorder = HotkeyRecorderButton(title: L("录制"))
-        recorder.controlSize = .small
-        recorder.font = Design.Font.monoBadge
+        // 快捷键统一在行内设置：每区域一个录制钮（按下直接吸到该区域，跳过投影选区），
+        // 纵列靠右、垂直居中；旧版布局级快捷键（若已设）保留在列顶，可改可清
+        let recColumn = NSStackView()
+        recColumn.orientation = .vertical
+        recColumn.spacing = 2
+        recColumn.alignment = .trailing
         if let kc = layout.activationKeyCode, kc > 0, let mods = layout.activationModifiers {
-            recorder.title = Self.hotkeyDisplay(keyCode: UInt32(kc), modifiers: mods)
+            let rec = makeShortcutRecorder(layoutID: layout.id, region: nil,
+                                           current: Self.hotkeyDisplay(keyCode: UInt32(kc), modifiers: mods))
+            let tag = Design.Text.caption(L("布局"))
+            let row = NSStackView(views: [tag, rec])
+            row.orientation = .horizontal
+            row.spacing = 6
+            recColumn.addArrangedSubview(row)
         }
-        recorder.frame = NSRect(x: 478, y: 36, width: 140, height: 22)
-        let layoutID = layout.id
-        recorder.onRecord = { [weak self] keyCode, modifiers in
-            guard Self.validateShortcut(keyCode: keyCode, modifiers: modifiers, excluding: layoutID) else { return }
+        for i in 0..<layout.regions.count {
+            let current = layout.regionHotkeys[i].flatMap {
+                $0.keyCode > 0 ? Self.hotkeyDisplay(keyCode: UInt32($0.keyCode), modifiers: $0.modifiers) : nil
+            }
+            let rec = makeShortcutRecorder(layoutID: layout.id, region: i, current: current)
+            rec.widthAnchor.constraint(equalToConstant: 108).isActive = true
+            rec.heightAnchor.constraint(equalToConstant: 20).isActive = true
+            if layout.regions.count > 1 {
+                let tag = Design.Text.caption(LF("区域 %d", i + 1))
+                let row = NSStackView(views: [tag, rec])
+                row.orientation = .horizontal
+                row.spacing = 6
+                recColumn.addArrangedSubview(row)
+            } else {
+                recColumn.addArrangedSubview(rec)
+            }
+        }
+        let colSize = recColumn.fittingSize
+        recColumn.frame = NSRect(x: Self.columnWidth - 12 - colSize.width,
+                                 y: (96 - colSize.height) / 2,
+                                 width: colSize.width, height: colSize.height)
+        cell.addSubview(recColumn)
+
+        return cell
+    }
+
+    /// 列表行的快捷键录制钮：region=nil 为旧版布局级（按窗口位置投影选区），
+    /// region=i 直接吸到区域 i。点击即录、Delete 清除、冲突弹窗拒绝；
+    /// 写回 LayoutStore 会广播 prefsChanged，HotkeyManager 自动重注册。
+    private func makeShortcutRecorder(layoutID: String, region: Int?, current: String?) -> HotkeyRecorderButton {
+        let rec = HotkeyRecorderButton(title: current ?? L("录制"))
+        rec.controlSize = .small
+        rec.font = Design.Font.monoBadge
+        rec.onRecord = { [weak self] keyCode, modifiers in
+            guard Self.validateShortcut(keyCode: keyCode, modifiers: modifiers,
+                                        excluding: layoutID, region: region) else { return }
             var list = LayoutStore.layouts
             guard let idx = list.firstIndex(where: { $0.id == layoutID }) else { return }
-            list[idx].activationKeyCode = Int(keyCode)
-            list[idx].activationModifiers = modifiers
-            LayoutStore.layouts = list   // 广播 prefsChanged → HotkeyManager 自动重注册
-            self?.layoutTable.reloadData()
-        }
-        recorder.onClear = { [weak self] in
-            var list = LayoutStore.layouts
-            guard let idx = list.firstIndex(where: { $0.id == layoutID }) else { return }
-            list[idx].activationKeyCode = nil
-            list[idx].activationModifiers = nil
+            if let region {
+                list[idx].regionHotkeys[region] = .init(keyCode: Int(keyCode), modifiers: modifiers)
+            } else {
+                list[idx].activationKeyCode = Int(keyCode)
+                list[idx].activationModifiers = modifiers
+            }
             LayoutStore.layouts = list
             self?.layoutTable.reloadData()
         }
-        cell.addSubview(recorder)
-
-        return cell
+        rec.onClear = { [weak self] in
+            var list = LayoutStore.layouts
+            guard let idx = list.firstIndex(where: { $0.id == layoutID }) else { return }
+            if let region {
+                list[idx].regionHotkeys[region] = nil
+            } else {
+                list[idx].activationKeyCode = nil
+                list[idx].activationModifiers = nil
+            }
+            LayoutStore.layouts = list
+            self?.layoutTable.reloadData()
+        }
+        return rec
     }
 
     // MARK: 拖拽排序

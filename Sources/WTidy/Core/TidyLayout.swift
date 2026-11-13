@@ -31,12 +31,21 @@ struct TidyLayout: Codable, Equatable {
     var rows: Int
     var regions: [Region]
     var scope: Int   // -1 = 所有屏幕（默认）；≥0 = 指定 CGDirectDisplayID
-    /// 每布局激活快捷键（原版 Activation Shortcut；nil = 未设置）
+    /// 每布局激活快捷键（原版 Activation Shortcut；nil = 未设置）——区域按窗口中心投影选择
     var activationKeyCode: Int?
     var activationModifiers: Int?
+    /// 每区域快捷键（regions 下标 → 组合）：按下直接把前台窗口吸到该区域，跳过投影选区
+    var regionHotkeys: [Int: RegionHotkey]
+
+    /// 区域快捷键组合（keyCode 用 Carbon 键码；modifiers 为 Carbon 修饰键位掩码）
+    struct RegionHotkey: Codable, Equatable {
+        var keyCode: Int
+        var modifiers: Int
+    }
 
     init(id: String, name: String, cols: Int, rows: Int, regions: [Region], scope: Int = -1,
-         activationKeyCode: Int? = nil, activationModifiers: Int? = nil) {
+         activationKeyCode: Int? = nil, activationModifiers: Int? = nil,
+         regionHotkeys: [Int: RegionHotkey] = [:]) {
         self.id = id
         self.name = name
         self.cols = cols
@@ -45,6 +54,7 @@ struct TidyLayout: Codable, Equatable {
         self.scope = scope
         self.activationKeyCode = activationKeyCode
         self.activationModifiers = activationModifiers
+        self.regionHotkeys = regionHotkeys
     }
 
     /// 兼容旧版持久化 JSON（无 scope/快捷键字段时回退默认）
@@ -58,6 +68,7 @@ struct TidyLayout: Codable, Equatable {
         scope = try c.decodeIfPresent(Int.self, forKey: .scope) ?? -1
         activationKeyCode = try c.decodeIfPresent(Int.self, forKey: .activationKeyCode)
         activationModifiers = try c.decodeIfPresent(Int.self, forKey: .activationModifiers)
+        regionHotkeys = try c.decodeIfPresent([Int: RegionHotkey].self, forKey: .regionHotkeys) ?? [:]
     }
 
     /// 归一化区域矩形（原点左上，0..1）——贴屏换算与缩略图共用

@@ -276,3 +276,19 @@ grep -rn "xRadius\|cornerRadius" Sources/WTidy/UI Sources/WTidy/Overlay | grep -
 **防回归**：`layoutShortcutConflictDetected` / `fixedActionConflictDetected`。教训：swift-testing 各 Suite 默认并行——共享 `LayoutStore` 全局态的测试必须放进同一 `.serialized` 套件（独立套件会被 SnapEngineTests 每测试一次的 `init() reset` 竞态击穿，实测翻车一次）。
 
 **验证**：`swift test` 31/31 通过；键完整性两表 146/146 零缺口。
+
+---
+
+## 十五次核对：2026-11-13（每区域快捷键 + 配置入口统一收编到列表）
+
+**触发**：用户指出快捷键应按布局内的区域（窗口位）数量设置，且「在列表统一设置更方便，冲突一目了然」。
+
+**改动**：
+- 数据模型：`TidyLayout.regionHotkeys: [Int: RegionHotkey]`（区域下标 → 组合），Codable 向后兼容（旧 JSON 回退空表）。
+- 运行时：`HotkeyManager` 区域快捷键独立 id 段（6000+）注册分发；按下经 `snapFrontmost(layout:zoneIndex:)` 直接吸到该区域，跳过投影选区；注册失败留日志。布局级快捷键（按窗口中心投影）保留注册兼容，UI 不再新增入口。
+- UI：编辑器撤掉全部快捷键控件（回归纯几何/名称/作用域，内容改滚动容器防溢出）；布局列表行右侧改「每区域一个录制钮」纵列（多区域带「区域 N」角标，右对齐、垂直居中、不压文字区），旧版布局级组合若已设保留在列顶。
+- 冲突校验扩展：`conflictOwner` 覆盖固定动作 + 布局级 + 区域级三级，豁免精确同位；区域被删后越界快捷键自动清理。
+
+**防回归**：`regionShortcutConflictSemantics`（同布局跨区域/布局级撞区域/豁免同位/跨布局）、`regionHotkeysPersistenceRoundTrip`、`layoutRowRecorderColumn`（录制钮数量 = 区域数、纵列右对齐不越界）。测试教训再记一笔：`view(atColumn:row:)` 的 table 藏在列表自有 scrollView 里，别拿页面 scroll 的 documentView。
+
+**验证**：`swift test` 34/34 通过；键完整性两表 144/144 零缺口。

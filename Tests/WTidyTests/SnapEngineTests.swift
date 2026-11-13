@@ -390,6 +390,37 @@ struct SnapEngineTests {
                                                    excluding: "other-layout") == nil)
     }
 
+    @Test func regionShortcutConflictSemantics() {
+        var list = LayoutStore.layouts
+        // 布局 A 的区域 0 录了 ⌥⌘S
+        list[0].regionHotkeys[0] = .init(keyCode: 1, modifiers: cmdKey | optionKey)
+        LayoutStore.layouts = list
+
+        let expected = LayoutStore.layouts[0].name + " · " + LF("区域 %d", 1)
+        // 同布局另一区域录同一组合 → 冲突，占用者名带区域号
+        #expect(HotkeyManager.shared.conflictOwner(keyCode: 1, modifiers: cmdKey | optionKey,
+                                                   excluding: list[0].id, region: 1) == expected)
+        // 同布局录布局级快捷键撞区域组合 → 也算冲突
+        #expect(HotkeyManager.shared.conflictOwner(keyCode: 1, modifiers: cmdKey | optionKey,
+                                                   excluding: list[0].id, region: nil) == expected)
+        // 豁免精确同位（重录自己）
+        #expect(HotkeyManager.shared.conflictOwner(keyCode: 1, modifiers: cmdKey | optionKey,
+                                                   excluding: list[0].id, region: 0) == nil)
+        // 其他布局撞车同样报
+        #expect(HotkeyManager.shared.conflictOwner(keyCode: 1, modifiers: cmdKey | optionKey,
+                                                   excluding: "other", region: 0) == expected)
+    }
+
+    @Test func regionHotkeysPersistenceRoundTrip() {
+        var list = LayoutStore.layouts
+        list[1].regionHotkeys[2] = .init(keyCode: 20, modifiers: cmdKey | controlKey)
+        LayoutStore.layouts = list
+        // 重新读取（走 UserDefaults JSON 往返），区域快捷键必须存活
+        let reread = LayoutStore.layouts
+        #expect(reread[1].regionHotkeys[2] == .init(keyCode: 20, modifiers: cmdKey | controlKey))
+        // 旧 JSON（无 regionHotkeys 字段）解码回退为空表——由 init(from:) 的 decodeIfPresent 保证
+    }
+
     @Test func fixedActionConflictDetected() {
         // ⌥⌘← 是固定动作「左半屏」（keyCode 123）
         let owner = HotkeyManager.shared.conflictOwner(keyCode: 123, modifiers: cmdKey | optionKey,
