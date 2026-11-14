@@ -69,4 +69,4 @@ echo "✓ 下载完成: $ZIP（$(wc -c < "$ZIP") 字节）"
 
 # upload-cnb-release.sh 默认读 CNB_BRANCH（tag_push 场景），手动/兜底场景在此显式传入
 export CNB_RELEASE_TAG="$TAG"
-exec scripts/upload-cnb-release.sh "$ZIP"
+exec bash scripts/upload-cnb-release.sh "$ZIP"
