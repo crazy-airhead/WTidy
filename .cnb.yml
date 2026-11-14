@@ -4,15 +4,36 @@
 #   1) 自动：推 v* 标签 → 轮询等待 GitHub 产物（30s 一次，上限 20 分钟）→ 下载 → 发 CNB Release
 #   2) 手动：代码 → 分支 main → 「同步发布 CNB Release」按钮（定义在 .cnb/web_trigger.yml）
 #      GitHub 已发布成功后点一下即可；tag 名留空默认同步 GitHub 最新 Release，填了则同步指定 tag。
-# 发布走 curl + 内置 CNB_TOKEN（tag_push 属可信事件，自带 repo-release:rw 权限）。
+# 注意：web_trigger 事件无提交上下文，工作区不会自动检出代码，故「检出代码」阶段不可省略
+#（tag_push 检出的是 tag 所指提交，旧 tag 里没有脚本时同样靠该阶段自愈）。
+# 发布走 curl + 内置 CNB_TOKEN（可信事件自带 repo-release:rw 权限）。
 $:
   tag_push:
     - name: release
       docker:
         image: alpine:3
       stages:
-        - name: 准备环境（curl + python3）
-          script: apk add --no-cache curl python3
+        - name: 准备环境（curl + python3 + git）
+          script: apk add --no-cache curl python3 git
+
+        - name: 检出代码（工作区缺脚本时从 main 补取）
+          script: |
+            if [ ! -f scripts/sync-github-release.sh ]; then
+              echo "==> 工作区缺少同步脚本（pwd: $(pwd)；内容: $(ls -A | tr '\n' ' ')），开始补检"
+              CLONE_URL="https://cnb:${CNB_TOKEN}@cnb.cool/${CNB_REPO_SLUG}.git"
+              if git rev-parse --git-dir > /dev/null 2>&1; then
+                # tag_push 已自动检出（可能是旧 tag），仅补 scripts/ 即可
+                git fetch --depth 1 origin main
+                git checkout FETCH_HEAD -- scripts/
+                chmod +x scripts/*.sh
+              elif [ -z "$(ls -A)" ]; then
+                # web_trigger 工作区为空，直接克隆 main
+                git clone --depth 1 "$CLONE_URL" .
+              else
+                echo "✗ 工作区非空且无 git 仓库，无法补检"; ls -la; exit 1
+              fi
+            fi
+            echo "==> 检出完成: $(git log --oneline -1 2> /dev/null || echo '未知提交')"
 
         - name: 同步 GitHub Release 到 CNB
           script: scripts/sync-github-release.sh
@@ -23,8 +44,25 @@ main:
       docker:
         image: alpine:3
       stages:
-        - name: 准备环境（curl + python3）
-          script: apk add --no-cache curl python3
+        - name: 准备环境（curl + python3 + git）
+          script: apk add --no-cache curl python3 git
+
+        - name: 检出代码（web_trigger 不自动检出，必须克隆）
+          script: |
+            if [ ! -f scripts/sync-github-release.sh ]; then
+              echo "==> 工作区缺少同步脚本（pwd: $(pwd)；内容: $(ls -A | tr '\n' ' ')），开始克隆 main"
+              CLONE_URL="https://cnb:${CNB_TOKEN}@cnb.cool/${CNB_REPO_SLUG}.git"
+              if git rev-parse --git-dir > /dev/null 2>&1; then
+                git fetch --depth 1 origin main
+                git checkout FETCH_HEAD -- scripts/
+                chmod +x scripts/*.sh
+              elif [ -z "$(ls -A)" ]; then
+                git clone --depth 1 "$CLONE_URL" .
+              else
+                echo "✗ 工作区非空且无 git 仓库，无法补检"; ls -la; exit 1
+              fi
+            fi
+            echo "==> 检出完成: $(git log --oneline -1 2> /dev/null || echo '未知提交')"
 
         - name: 同步 GitHub Release 到 CNB
           script: scripts/sync-github-release.sh
