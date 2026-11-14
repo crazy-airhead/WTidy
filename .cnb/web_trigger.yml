@@ -1,0 +1,16 @@
+# 手动触发按钮：代码 → 分支详情 → main → 「同步发布 CNB Release」。
+# GitHub Release 发布成功后点一下即可镜像到 CNB；
+# 「tag 名」留空则自动同步 GitHub 最新 Release，填了（如 v0.1.2）则同步指定 tag。
+# 事件 web_trigger_sync_release 对应的流水线定义在 .cnb.yml 的 main 分支下。
+branch:
+  - reg: ^main$
+    buttons:
+      - name: 同步发布 CNB Release
+        description: 从 GitHub Release 镜像发布到 CNB
+        event: web_trigger_sync_release
+        inputs:
+          SYNC_TAG:
+            name: tag 名
+            type: input
+            required: false
+            placeholder: 留空 = 同步 GitHub 最新 Release（如 v0.1.2）
