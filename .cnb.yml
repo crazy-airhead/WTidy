@@ -13,8 +13,8 @@ $:
       docker:
         image: alpine:3
       stages:
-        - name: 准备环境（curl + python3 + git）
-          script: apk add --no-cache curl python3 git
+        - name: 准备环境（curl + python3 + git + bash）
+          script: apk add --no-cache curl python3 git bash
 
         - name: 检出代码（工作区缺脚本时从 main 补取）
           script: |
@@ -36,7 +36,7 @@ $:
             echo "==> 检出完成: $(git log --oneline -1 2> /dev/null || echo '未知提交')"
 
         - name: 同步 GitHub Release 到 CNB
-          script: scripts/sync-github-release.sh
+          script: bash scripts/sync-github-release.sh
 
 main:
   web_trigger_sync_release:
@@ -44,8 +44,8 @@ main:
       docker:
         image: alpine:3
       stages:
-        - name: 准备环境（curl + python3 + git）
-          script: apk add --no-cache curl python3 git
+        - name: 准备环境（curl + python3 + git + bash）
+          script: apk add --no-cache curl python3 git bash
 
         - name: 检出代码（web_trigger 不自动检出，必须克隆）
           script: |
@@ -65,4 +65,4 @@ main:
             echo "==> 检出完成: $(git log --oneline -1 2> /dev/null || echo '未知提交')"
 
         - name: 同步 GitHub Release 到 CNB
-          script: scripts/sync-github-release.sh
+          script: bash scripts/sync-github-release.sh
