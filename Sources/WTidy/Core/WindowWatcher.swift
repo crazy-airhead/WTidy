@@ -59,6 +59,7 @@ final class WindowWatcher {
                 moveCount = 1
                 phase = .watching
                 dragSession += 1
+                startPolling()   // watching 期也盯左键：松手即丢弃会话，不留旧 firstFrame 给下次拖拽
                 return
             }
         }
@@ -67,6 +68,17 @@ final class WindowWatcher {
             // 换了窗口：重置
             reset()
             registerMove(w, frame: frame)
+            return
+        }
+
+        // 拖拽进展要求左键仍按住：松手后才到达的收尾事件（落位回弹等）不计入判定
+        if !WindowWatcher.isLeftButtonDown {
+            if phase == .active {
+                finishDrag()   // 已激活：等同松手结束，照常评估吸附
+            } else {
+                AppLog.info("未达阈值即松手，丢弃 session=\(dragSession)")
+                reset()
+            }
             return
         }
 
@@ -100,17 +112,20 @@ final class WindowWatcher {
     }
 
     private func tick() {
-        guard phase == .active else {
-            stopPolling()
-            return
-        }
         let leftDown = WindowWatcher.isLeftButtonDown
         leftDownLastTick = leftDown
-        if !leftDown {
-            // 松手 → 结束拖拽，交给 Overlay 决定吸附与否
-            finishDrag()
+        guard leftDown else {
+            if phase == .active {
+                // 松手 → 结束拖拽，交给 Overlay 决定吸附与否
+                finishDrag()
+            } else {
+                // watching 期松手：丢弃未成型的会话，避免旧 firstFrame 污染下次拖拽
+                AppLog.info("未达阈值即松手，丢弃 session=\(dragSession)")
+                reset()
+            }
             return
         }
+        guard phase == .active else { return }
         delegate?.dragTick(cursor: NSEvent.mouseLocation)
     }
 

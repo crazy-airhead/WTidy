@@ -20,6 +20,13 @@ final class AccessibilityService {
     /// 看门狗重建监听链时会重新 observe 同一个窗口，此时不应再发
     /// focusedWindowChanged——否则正在进行的拖拽会被误取消。
     private var lastReportedWindow: AXUIElement?
+    /// 聚焦窗口查询的延迟重试。AX 查询是同步 RPC，目标 app 主线程忙
+    /// （如正在拖拽）时会瞬时失败；此时立即拆链会让监听断到下次焦点变化
+    /// 或看门狗心跳，期间拖动窗口图标条呼不出来。改为退避重试自愈。
+    private var focusRetry: DispatchWorkItem?
+    private var focusRetryAttempt = 0
+    /// 重试退避间隔（累计约 3.75s 后放弃，恢复旧的拆链行为）
+    private static let focusRetryDelays: [TimeInterval] = [0.25, 0.5, 1.0, 2.0]
 
     enum Event {
         case windowDidMove(AXWindow)
@@ -125,6 +132,7 @@ final class AccessibilityService {
     }
 
     private func teardown() {
+        cancelFocusRetry()
         if let obs = observer, let app = appElement {
             AXObserverRemoveNotification(obs, app, Self.focusedChanged as CFString)
         }
@@ -150,9 +158,12 @@ final class AccessibilityService {
     private func observeFocusedWindow() {
         guard let observer = observer, let app = appElement, let pid = observedPID else { return }
         guard let win = axAttributeElement(app, kAXFocusedWindowAttribute as String) else {
-            unobserveWindow()
+            // 多为目标 app 忙（如正在拖拽）导致的瞬时失败：退避重试而不是立即拆链，
+            // 拆了链拖拽期间就再无 moved 事件。重试期间旧窗口监听保持不动。
+            scheduleFocusRetry(pid: pid)
             return
         }
+        cancelFocusRetry()
 
         // 同一个窗口就不重复挂
         if let old = observedWindow, CFEqual(old, win) { return }
@@ -178,6 +189,34 @@ final class AccessibilityService {
         DispatchQueue.main.async { [weak self] in
             self?.delegate?(.focusedWindowChanged(axWin))
         }
+    }
+
+    // MARK: - 聚焦窗口查询重试
+
+    private func scheduleFocusRetry(pid: pid_t) {
+        guard focusRetry == nil else { return }   // 已有重试排队，不叠加
+        let attempt = focusRetryAttempt
+        guard attempt < Self.focusRetryDelays.count else {
+            focusRetryAttempt = 0
+            AppLog.warn("聚焦窗口查询持续失败，放弃重试 pid=\(pid)")
+            unobserveWindow()
+            return
+        }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            self.focusRetry = nil
+            AppLog.info("聚焦窗口查询失败，重试 \(attempt + 1)/\(Self.focusRetryDelays.count) pid=\(pid)")
+            self.observeFocusedWindow()
+        }
+        focusRetry = work
+        focusRetryAttempt += 1
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.focusRetryDelays[attempt], execute: work)
+    }
+
+    private func cancelFocusRetry() {
+        focusRetry?.cancel()
+        focusRetry = nil
+        focusRetryAttempt = 0
     }
 
     // MARK: - C 回调
